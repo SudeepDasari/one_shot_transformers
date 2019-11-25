@@ -10,6 +10,7 @@ import cv2
 import multiprocessing
 import torch.nn as nn
 import torchvision.models as models
+from torch.utils.tensorboard import SummaryWriter
 
 
 def numeric_sort(files):
@@ -53,7 +54,7 @@ class EpicVideoDataset(Dataset):
         return np.concatenate(imgs, 0)
         
 
-def train_embedding(epic_dir, save_dir='.'):
+def train_embedding(epic_dir, T=200, save_dir='.', n_gpus=1, lr=1e-4, n_epochs=10000, lambda_var=0.001, ex_per_step=10):
     if os.path.exists('{}/data_splits.pkl'.format(save_dir)):
         assignments = pkl.load(open('{}/data_splits.pkl'.format(save_dir), 'rb'))
         train_kitchens = assignments['train']
@@ -64,26 +65,59 @@ def train_embedding(epic_dir, save_dir='.'):
         train_kitchens, val_kitchens = kitchen_folders[4:], kitchen_folders[:4]
         pkl.dump({'train': train_kitchens, 'val': val_kitchens}, open('{}/data_splits.pkl'.format(save_dir), 'wb'))
     
-    train_dataset = EpicVideoDataset(train_kitchens, T=200)
+    train_dataset = EpicVideoDataset(train_kitchens, T=T)
     train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4)
     
-    model = models.resnet50(pretrained=True)
+    model = models.resnet18(pretrained=True)
     model = nn.Sequential(*list(model.children())[:-1])
     model.cuda()
-    print(model)
 
-    for _ in range(2):
+    optimizer = torch.optim.SGD(model.parameters(), lr)
+    optimizer.zero_grad()
+    cross_entropy_loss = nn.CrossEntropyLoss()
+    writer = SummaryWriter()
+    ctr = 0
+    for e in range(n_epochs * ex_per_step):
+        epoch_loss =  0
         for imgs in train_loader:
-            import pdb; pdb.set_trace()
             imgs = imgs.cuda()
-            feat1 = model(imgs[0])[:, :, 0, 0]
-            print(feat1.shape)   
+            U = model(imgs[0])[:, :, 0, 0]
+            V = model(imgs[1])[:, :, 0, 0]
+
+            chosen_i = np.random.randint(T)
+            deltas = torch.sum((U[chosen_i][None] - V) ** 2, dim=1)
+            v_hat = torch.sum(torch.nn.functional.softmax(-deltas, dim=0)[:, None] * V, dim=0)[None]
+            class_logits = -torch.sum((v_hat - U) ** 2, dim=1)
+            l_1 = cross_entropy_loss(class_logits.view((1, -1)), torch.from_numpy(np.array([chosen_i])).cuda())
             
+            betas = torch.nn.functional.softmax(class_logits, dim=0)
+            mu = torch.sum(betas * torch.range(0, T-1).cuda())
+            sigma_square = torch.sum(betas * (torch.range(0, T-1).cuda() - chosen_i) ** 2)
+            l_2 = (chosen_i - mu) / sigma_square + lambda_var * torch.log(sigma_square) / 2
+
+            loss = l_1 + l_2
+            loss.backward()
+
+            writer.add_scalar('Loss/pred_loss', l_1.item(), ctr)
+            writer.add_scalar('Loss/gauss_loss', l_2.item(), ctr)
+
+            ctr += 1
+            epoch_loss += loss.item() / len(train_loader)
+            if ctr % ex_per_step == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+
+        writer.add_scalar('Loss/train', epoch_loss, e)
+        writer.file_writer.flush()
+
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage="trains a cyclic embedding")
     parser.add_argument('data_path', help="path to epic base folder")
+    parser.add_argument('--T', help="number of timesteps to sample from each video", default=70, type=int)
+    parser.add_argument('--n_gpus', help="number of gpus to train on", default=1, type=int)
+    parser.add_argument('--save_dir', help="number of gpus to train on", default='.', type=str)
     args = parser.parse_args()
 
-    train_embedding(args.data_path)
+    train_embedding(args.data_path, args.T, args.save_dir, args.n_gpus)
