@@ -9,7 +9,8 @@ import cv2
 
 
 class SomethingSomething(Dataset):
-    def __init__(self, root_dir, height=224,width=375,T=30, pair_by_task=True, mode='train'):
+    # 224, 375
+    def __init__(self, root_dir, height=77,width=128,T=30, pair_by_task=True, mode='train'):
         super(Dataset, self).__init__()
         assert pair_by_task, "only paired loading implemented"
         assert T > 2, "must have at least 2 frames"
@@ -49,7 +50,6 @@ class SomethingSomething(Dataset):
             else:
                 break
         
-        print(index_key)
         first_index = key_index // (len(self._label_map[index_key]) - 1)
         second_index = key_index % (len(self._label_map[index_key]) - 1)
         if second_index >= first_index:
@@ -69,4 +69,4 @@ class SomethingSomething(Dataset):
         if frames[0].shape[0] * frames[0].shape[1] > self._height * self._width:
             resize_method = cv2.INTER_AREA
         frames = [cv2.resize(f, (self._width, self._height), interpolation=resize_method)[None] for f in frames]
-        return np.concatenate(frames, axis=0)
+        return np.concatenate(frames, axis=0).astype(np.float32) / 255

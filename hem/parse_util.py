@@ -20,5 +20,5 @@ def parse_basic_config(config_file):
     yaml.add_implicit_resolver("!env", env_pattern, Loader=yaml.SafeLoader)
     yaml.add_constructor('!env', env_var_constructor, Loader=yaml.SafeLoader)
 
-    with open(config_file) as config:
+    with open(os.path.expanduser(config_file), 'r') as config:
         return yaml.load(config, Loader=yaml.SafeLoader)

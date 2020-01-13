@@ -1,0 +1,10 @@
+batch_size: 8
+lr: 0.0001
+log_sigma_weight: 1
+
+dataset:
+  type: "something something"
+  root_dir: ${SOMETHING_DIR}
+
+model:
+  type: base
