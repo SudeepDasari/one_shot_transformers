@@ -10,7 +10,8 @@ import cv2
 
 class SomethingSomething(Dataset):
     # 224, 375
-    def __init__(self, root_dir, height=77,width=128,T=30, pair_by_task=True, mode='train'):
+    # 77, 128
+    def __init__(self, root_dir, height=224,width=375,T=30, pair_by_task=True, mode='train', key_filter=None):
         super(Dataset, self).__init__()
         assert pair_by_task, "only paired loading implemented"
         assert T > 2, "must have at least 2 frames"
@@ -21,6 +22,8 @@ class SomethingSomething(Dataset):
 
         for t in labels:
             key = t['template'].lower()
+            if key_filter is not None and key != key_filter:
+                continue
             arr = self._label_map.get(key, [])
             arr.append(int(t['id']))
             self._label_map[key] = arr
@@ -43,7 +46,7 @@ class SomethingSomething(Dataset):
         if torch.is_tensor(index):
             index = index.tolist()
         
-        key_index, index_key = -1,  None
+        key_index, index_key = -1, None
         for start, k in self._start_indexes:
             if index >= start:
                 key_index, index_key = index - start, k
@@ -58,11 +61,14 @@ class SomethingSomething(Dataset):
         first_video = self._load_video(self._label_map[index_key][first_index])
         second_video = self._load_video(self._label_map[index_key][second_index])
         return np.transpose(first_video, (0, 3, 1, 2)), np.transpose(second_video, (0, 3, 1, 2))
-    
         
     def _load_video(self, index):
-        load_dir = os.path.join(self._root_dir, '{}.webm'.format(index))
-        frames = [f for f in mpy.VideoFileClip(load_dir).iter_frames()]
+        load_dir = os.path.join(self._root_dir, '{}'.format(index))
+        if os.path.exists(load_dir + '.npz'):
+            frames = np.load(load_dir + '.npz', allow_pickle=True)['frames']
+            frames = [cv2.imdecode(f, cv2.IMREAD_COLOR) for f in frames]
+        else:
+            frames = [f for f in mpy.VideoFileClip(load_dir + '.webm').iter_frames()]
         frames = [frames[0]] + [frames[i] for i in np.sort(np.random.choice(len(frames), size=self._T - 2, replace=self._T > len(frames)))] + [frames[-1]]
         
         resize_method = cv2.INTER_CUBIC
