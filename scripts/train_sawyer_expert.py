@@ -67,7 +67,7 @@ if __name__ == "__main__":
     # register_env("corridor", lambda config: SimpleCorridor(config))
     # \lambda \in [0.9, 1]
 
-    ray.init(local_mode=True)
+    ray.init()
     ModelCatalog.register_custom_model("my_model", FCNet)
     tune.run(
         "PPO",
@@ -85,7 +85,7 @@ if __name__ == "__main__":
                 "env_name": "SawyerPickPlaceCan",
                 "obs_filters": ['robot-state',  'object-state']
             },
-            "num_workers": 7,
+            "num_workers": 12,
             "sample_async": False,
             "lr": 2.5e-4,
             "vf_loss_coeff": 0.5,
