@@ -73,6 +73,7 @@ if __name__ == "__main__":
         "PPO",
         stop={
             "timesteps_total": 2000000,
+            "episode_reward_max": 200
         },
         config={
             "env": "RoboPickPlace",  # or "corridor" if registered above
@@ -89,7 +90,7 @@ if __name__ == "__main__":
             "sample_async": False,
             "lr": 2.5e-4,
             "vf_loss_coeff": 0.5,
-            "lr_schedule": [(0, 2.5e-4), (100000, 5e-5), (1000000, 1e-5), (4000000, 1e-6)],
+            "lr_schedule": [(0, 2.5e-4), (100000, 5e-5), (3000000, 1e-5), (6000000, 1e-6)],
             "lambda": grid_search([0.9, 0.95, 0.99])
         },
         checkpoint_at_end=True,
