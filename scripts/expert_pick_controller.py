@@ -1,49 +1,49 @@
 from hem.robosuite import get_env
-from robosuite.controllers.sawyer_ik_controller import SawyerIKController
-import robosuite
-import os
 import numpy as np
 from pyquaternion import Quaternion
+from hem.robosuite.controllers import PickPlaceController
+from multiprocessing import Pool, cpu_count
+import functools
 
+def expert_rollout(N, env_type, render):
+    env = get_env(env_type)(has_renderer=render, reward_shaping=False, use_camera_obs=False)
+    controller = PickPlaceController(env)
 
-def get_delta(obs):
-    delta = obs['Can0_pos'] - obs['eef_pos']
-    norm_delta = np.linalg.norm(delta)
+    success = 0
+    for _ in range(N):
+        obs = env.reset()
+        controller.reset()
 
-    if norm_delta < 0.01:
-        return np.zeros_like(delta)
-    return delta / norm_delta * 0.01
+        if render:
+            env.render()
+        
+        for t in range(env.horizon):
+            obs, reward, done, info = env.step(controller.act(obs))
+            if render:
+                env.render()
+            if reward:
+                success += 1
+                break
+        if render:
+            env.close()
+    return success
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--render', action='store_true')
-    parser.add_argument('--T', default=200, type=int)
+    parser.add_argument('--N', default=10, type=int)
+    parser.add_argument('--env', default='SawyerPickPlaceCan', type=str)
     args = parser.parse_args()
     
-    main_env = get_env('SawyerPickPlaceCan')(has_renderer=args.render, reward_shaping=True, use_camera_obs=False)
-    jpos_getter = lambda : np.array(main_env._joint_positions)
-    sawyer_ik = SawyerIKController(os.path.join(robosuite.models.assets_root, "bullet_data"), jpos_getter)
-    
-    obs = main_env.reset()
+
     if args.render:
-        main_env.render()
-    
-    base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
-    angle = np.arctan2(-(obs['Can0_pos'][1] - obs['eef_pos'][1]), obs['Can0_pos'][0] - obs['eef_pos'][0])
-    new_rot = np.array([[np.cos(angle), -np.sin(angle), 0],[np.sin(angle), np.cos(angle), 0],[0, 0, 1]])
-    quat = Quaternion(matrix=base_rot)
-    new_quat = Quaternion(matrix=base_rot.dot(new_rot))
-
-    print(obs['eef_pos'])
-    print(obs['Can0_pos'] - obs['eef_pos'])
-
-    velocities = sawyer_ik.get_control(get_delta(obs), np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]]))
-    for t in range(args.T):
-        target_quat = Quaternion.slerp(quat, new_quat, min(1, float(t) / 50))
-        obs = main_env.step(np.concatenate((velocities, [-1])))[0]
-        if args.render:
-            main_env.render()
-        velocities = sawyer_ik.get_control(get_delta(obs), target_quat.transformation_matrix[:3,:3])
-    print(jpos_getter())
+        success = expert_rollout(args.N, args.env, True)
+    else:
+        with Pool(cpu_count()) as p:
+            f = functools.partial(expert_rollout, env_type=args.env, render=False)
+            n_per = int(np.ceil(args.N / cpu_count()))
+            args.N = n_per * cpu_count()
+            success = sum(p.map(f, [n_per for _ in range(cpu_count())]))
+    print('Success rate', success / float(args.N))
