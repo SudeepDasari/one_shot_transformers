@@ -48,6 +48,7 @@ class PickPlaceController:
         self._intermediate_point = np.array([0.44969246 + 0.2, 0.16029991, 1.05])
         self._base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
         self._base_quat = Quaternion(matrix=self._base_rot)
+
     
     def act(self, obs):
         if self._t == 0:
@@ -76,7 +77,7 @@ class PickPlaceController:
                 target = self._intermediate_point
             
             velocities = self._ik.get_control(_clip_delta(target - obs[self._obs_name]), self._target_quat.transformation_matrix[:3,:3])
-            action = np.concatenate((velocities, [1]))
+            action = np.concatenate((velocities, [10]))
         else:
             action = np.zeros(8)
             action[-1] = -1
