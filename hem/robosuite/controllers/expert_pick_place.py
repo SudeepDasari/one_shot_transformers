@@ -23,8 +23,10 @@ class PickPlaceController:
         self.reset()
         
     def _calculate_quat(self, angle):
-        new_rot = np.array([[np.cos(angle), -np.sin(angle), 0],[np.sin(angle), np.cos(angle), 0],[0, 0, 1]])
-        return Quaternion(matrix=self._base_rot.dot(new_rot))
+        if isinstance(self._env, SawyerEnv):
+            new_rot = np.array([[np.cos(angle), -np.sin(angle), 0],[np.sin(angle), np.cos(angle), 0],[0, 0, 1]])
+            return Quaternion(matrix=self._base_rot.dot(new_rot))
+        return self._base_quat
     
     def reset(self):
         self._object_name = self._env.item_names_org[self._env.object_id] + '0'
@@ -36,23 +38,28 @@ class PickPlaceController:
         if isinstance(self._env, SawyerEnv):
             self._ik = SawyerIKController(bullet_path, self._jpos_getter)
             self._obs_name = 'eef_pos'
-            self._base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
+            self._default_speed = 0.015
+            self._final_thresh = 1e-2
+            self._clearance = 0.03
         elif isinstance(self._env, BaxterEnv):
             self._ik = BaxterIKController(bullet_path, self._jpos_getter)
             self._obs_name = 'right_eef_pos'
-            self._base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]]) # Quaternion(0.7668862,   0.38695655,  0.07481244, -0.5065109).transformation_matrix[:3,:3]
-            # angle = np.pi / 4
-            # self._base_rot = self._base_rot.dot(np.array([[np.cos(angle), 0, np.sin(angle)], [0, 1.0, 0], [-np.sin(angle), 0, np.cos(angle)]]))
+            self._default_speed = 0.004
+            self._final_thresh = 6e-2
+            self._clearance = 0.015
         else:
             raise NotImplementedError
 
         self._t = 0
         self._intermediate_reached = False
-
-        self._intermediate_point = np.array([0.44969246 + 0.2, 0.16029991, 1.05])
+        self._base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
         self._base_quat = Quaternion(matrix=self._base_rot)
+        self._intermediate_point = np.array([0.44969246 + 0.2, 0.16029991, 1.05])
     
-    def _get_velocities(self, delta_pos, quat, max_step=0.015):    # baxter decrease speed?
+    def _get_velocities(self, delta_pos, quat, max_step=None):
+        if max_step is None:
+            max_step = self._default_speed
+        
         if isinstance(self._env, BaxterEnv):
             right_delta = {'dpos': _clip_delta(delta_pos, max_step), 'rotation': quat.transformation_matrix[:3,:3]}
             left_delta = {'dpos': np.zeros(3), 'rotation': self._base_rot}
@@ -71,12 +78,12 @@ class PickPlaceController:
             velocities = self._get_velocities(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, 0.05], quat_t)
             action = np.concatenate((velocities, [-1]))
         elif self._t < 200:
-            velocities = self._get_velocities(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] - [0, 0, 0.03], self._target_quat)   # bax change to 0.015
+            velocities = self._get_velocities(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] - [0, 0, self._clearance], self._target_quat)   
             if self._t  < 175:
                 action = np.concatenate((velocities, [-1]))
             else:
                 action = np.concatenate((velocities, [1]))
-        elif np.linalg.norm(self._target_loc - obs[self._obs_name]) > 1e-2: # baxter increase?
+        elif np.linalg.norm(self._target_loc - obs[self._obs_name]) > self._final_thresh: 
             if self._intermediate_reached:
                 target = self._target_loc
             elif np.linalg.norm(self._intermediate_point - obs[self._obs_name]) < 1e-2:
