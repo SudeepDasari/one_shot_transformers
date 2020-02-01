@@ -187,7 +187,7 @@ class BaxterPickPlace(BaxterEnv):
             self.mujoco_arena.add_pos_indicator()
 
         # The sawyer robot has a pedestal, we want to align it with the table
-        self.mujoco_arena.set_origin([.5, -0.6, 0])
+        self.mujoco_arena.set_origin([.4, -0.3, 0])
 
         self.ob_inits = [MilkObject, BreadObject, CerealObject, CanObject]
         self.vis_inits = [
