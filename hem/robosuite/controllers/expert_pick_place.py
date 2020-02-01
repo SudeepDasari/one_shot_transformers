@@ -46,7 +46,7 @@ class PickPlaceController:
             self._obs_name = 'right_eef_pos'
             self._default_speed = 0.004
             self._final_thresh = 6e-2
-            self._clearance = 0.015
+            self._clearance = 0.02
         else:
             raise NotImplementedError
 
@@ -93,7 +93,7 @@ class PickPlaceController:
                 target = self._intermediate_point
             
             velocities = self._get_velocities(target - obs[self._obs_name], self._target_quat)
-            action = np.concatenate((velocities, [100]))
+            action = np.concatenate((velocities, [10]))
         else:
             action = np.zeros(8)
             action[-1] = -1
