@@ -55,6 +55,14 @@ class PickPlaceController:
         self._base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
         self._base_quat = Quaternion(matrix=self._base_rot)
         self._intermediate_point = np.array([0.44969246 + 0.2, 0.16029991, 1.05])
+        self._hover_delta = 0.05
+
+        if 'Milk' in self._object_name:
+            self._clearance = -0.03
+            self._intermediate_point[2] += 0.07
+
+            if isinstance(self._env, BaxterEnv):
+                self._hover_delta = 0.1        
     
     def _get_velocities(self, delta_pos, quat, max_step=None):
         if max_step is None:
@@ -75,7 +83,7 @@ class PickPlaceController:
         
         if self._t < 150:
             quat_t = Quaternion.slerp(self._base_quat, self._target_quat, min(1, float(self._t) / 50))
-            velocities = self._get_velocities(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, 0.05], quat_t)
+            velocities = self._get_velocities(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, self._hover_delta], quat_t)
             action = np.concatenate((velocities, [-1]))
         elif self._t < 200:
             velocities = self._get_velocities(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] - [0, 0, self._clearance], self._target_quat)   
