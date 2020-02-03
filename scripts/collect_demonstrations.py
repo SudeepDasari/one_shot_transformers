@@ -4,47 +4,50 @@ from pyquaternion import Quaternion
 from hem.robosuite.controllers import PickPlaceController
 from multiprocessing import Pool, cpu_count
 import functools
+from hem.datasets.encoders import Trajectory
+import os
+import pickle as pkl
 
 
-def expert_rollout(N, env_type, render):
-    env = get_env(env_type)(has_renderer=render, reward_shaping=False, use_camera_obs=False)
+def expert_rollout(env_type, save_dir, camera_obs=True, n=0):
+    print(env_type, save_dir, camera_obs, n)
+    env = get_env(env_type)(has_renderer=False, reward_shaping=False, use_camera_obs=camera_obs)
     controller = PickPlaceController(env)
 
-    success = 0
-    for _ in range(N):
-        obs = env.reset()
-        controller.reset()
-
-        if render:
-            env.render()
-        
-        for t in range(env.horizon):
+    obs = env.reset()
+    controller.reset()
+    
+    success = False
+    while not success:
+        traj = Trajectory()
+        for _ in range(env.horizon):
             obs, reward, done, info = env.step(controller.act(obs))
-            if render:
-                env.render()
-            if reward:
-                success += 1
+            traj.add(obs, reward, done, info)
+            if reward or done:
+                success = True
                 break
-        if render:
-            env.close()
-    return success
+        pkl.dump(traj, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--render', action='store_true')
-    parser.add_argument('--N', default=10, type=int)
-    parser.add_argument('--env', default='SawyerPickPlaceCan', type=str)
+    parser.add_argument('save_dir', default='./', help='Folder to save rollouts')
+    parser.add_argument('--num_workers', default=cpu_count(), type=int, help='Number of collection workers (default=n_cores)')
+    parser.add_argument('--N', default=10, type=int, help="Number of trajectories to collect")
+    parser.add_argument('--env', default='SawyerPickPlaceCan', type=str, help="Environment name")
+    parser.add_argument('--no_cam', action='store_true', help="If flag then will not collect camera observation")
     args = parser.parse_args()
-    
+    assert args.num_workers > 0, "num_workers must be positive!"
 
-    if args.render:
-        success = expert_rollout(args.N, args.env, True)
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
+    else:
+        assert os.path.isdir(args.save_dir), "directory specified but is file and not directory!"
+
+    if args.num_workers == 1:
+        [expert_rollout(args.env, args.save_dir, not args.no_cam, n) for n in range(args.N)]
     else:
         with Pool(cpu_count()) as p:
-            f = functools.partial(expert_rollout, env_type=args.env, render=False)
-            n_per = int(np.ceil(args.N / cpu_count()))
-            args.N = n_per * cpu_count()
-            success = sum(p.map(f, [n_per for _ in range(cpu_count())]))
-    print('Success rate', success / float(args.N))
+            f = functools.partial(expert_rollout, args.env, args.save_dir, not args.no_cam)
+            p.map(f, range(args.N))
