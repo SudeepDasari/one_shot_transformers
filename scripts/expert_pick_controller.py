@@ -5,6 +5,7 @@ from hem.robosuite.controllers import PickPlaceController
 from multiprocessing import Pool, cpu_count
 import functools
 
+
 def expert_rollout(N, env_type, render):
     env = get_env(env_type)(has_renderer=render, reward_shaping=False, use_camera_obs=False)
     controller = PickPlaceController(env)
