@@ -18,7 +18,7 @@ def expert_rollout(env_type, save_dir, camera_obs=True, N=0):
     np.random.seed()
     for n in N:
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
-            return
+            continue
 
         obs = env.reset()
         controller.reset()
