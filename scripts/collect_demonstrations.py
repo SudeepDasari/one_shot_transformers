@@ -17,11 +17,11 @@ def expert_rollout(env_type, save_dir, camera_obs=True, N=0):
 
     np.random.seed()
     for n in N:
-        obs = env.reset()
-        controller.reset()
-
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
             return
+
+        obs = env.reset()
+        controller.reset()
         success = False
         while not success:
             traj = Trajectory()
