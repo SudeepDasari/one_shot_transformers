@@ -10,6 +10,9 @@ import pickle as pkl
 
 
 def expert_rollout(env_type, save_dir, camera_obs=True, n=0):
+    if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
+        return
+
     env = get_env(env_type)(has_renderer=False, reward_shaping=False, use_camera_obs=camera_obs)
     controller = PickPlaceController(env)
 
