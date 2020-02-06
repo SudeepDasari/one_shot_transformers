@@ -32,3 +32,7 @@ class Trajectory:
 
     def __len__(self):
         return self.T
+
+    def __iter__(self):
+        for d in range(self.T):
+            yield self.get(d)
