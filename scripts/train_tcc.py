@@ -52,9 +52,8 @@ if __name__ == '__main__':
             B, chosen_i = np.arange(config['batch_size']), np.random.randint(t1.shape[1], size=config['batch_size'])
             deltas = torch.sum((U[B,chosen_i][:,None] - V) ** 2, dim=2)
             v_hat = torch.sum(torch.nn.functional.softmax(-deltas, dim=1)[:,:,None] * V, dim=1)
-            class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)
-            
-            loss = cross_entropy(class_logits, torch.from_numpy(chosen_i).to(device)) / config['batch_size']
+            class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)        
+            loss = cross_entropy(class_logits, torch.from_numpy(chosen_i).to(device)) 
             loss.backward()
             optimizer.step()
             
@@ -64,7 +63,7 @@ if __name__ == '__main__':
             accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
             error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i)))
             
-            end = '\r'
+            end = '\n'
             if step % config.get('log_freq', 50) == 0:
                 avg_time = (time.time() - start) / config.get('log_freq', 50)
                 writer.add_scalar('loss/train', loss_stat, step)
@@ -74,7 +73,7 @@ if __name__ == '__main__':
                 start = time.time()
                 end = '\n'
             
-            print('step {0}: loss={1:2.5f} \t\t accuracy={2:2.3f} \t\t error={3:2.3f}'.format(step, loss_stat, accuracy_stat, error_stat), end=end)
+            print('step {0}: loss={1:.4f} \t\t accuracy={2:2.3f} \t\t error={3:2.3f}'.format(step, loss_stat, accuracy_stat, error_stat), end=end)
             step += 1
 
             if step % config.get('save_freq', 10000) == 0:
