@@ -62,7 +62,7 @@ if __name__ == '__main__':
             loss_stat = loss.item()
             argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
             accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
-            error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i)))
+            error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size']
             
             end = '\r'
             if step % config.get('log_freq', 50) == 0:
