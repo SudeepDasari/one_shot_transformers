@@ -1,8 +1,7 @@
 batch_size: 4
 lr: 0.001
-log_sigma_weight: 0.0
-normalize_sigma_square: False
-epochs: 3
+epochs: 20
+loader_workers: 4
 
 dataset:
   type: "agent teacher"
