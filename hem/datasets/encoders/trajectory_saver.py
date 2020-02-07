@@ -54,5 +54,5 @@ class Trajectory:
         return self.T
 
     def __iter__(self):
-        for d in range(self.T):
+        for d in range(self.T + 1):
             yield self.get(d)

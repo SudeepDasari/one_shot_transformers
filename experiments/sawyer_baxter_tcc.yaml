@@ -1,0 +1,13 @@
+batch_size: 4
+lr: 0.001
+log_sigma_weight: 0.0
+normalize_sigma_square: False
+epochs: 3
+
+dataset:
+  type: "agent teacher"
+  agent_dir: ${ROBOT_DIR}/sawyer_can
+  teacher_dir: ${ROBOT_DIR}/baxter_can
+
+model:
+  type: base
