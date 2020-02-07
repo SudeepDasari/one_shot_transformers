@@ -53,6 +53,7 @@ if __name__ == '__main__':
             deltas = torch.sum((U[B,chosen_i][:,None] - V) ** 2, dim=2)
             v_hat = torch.sum(torch.nn.functional.softmax(-deltas, dim=1)[:,:,None] * V, dim=1)
             class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)        
+            
             loss = cross_entropy(class_logits, torch.from_numpy(chosen_i).to(device)) 
             loss.backward()
             optimizer.step()
@@ -63,8 +64,8 @@ if __name__ == '__main__':
             accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
             error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size']
             
-            end = '\n'
-            if step % config.get('log_freq', 50) == 0:
+            end = '\r'
+            if step % config.get('log_freq', 10) == 0:
                 avg_time = (time.time() - start) / config.get('log_freq', 50)
                 writer.add_scalar('loss/train', loss_stat, step)
                 writer.add_scalar('accuracy/train', accuracy_stat, step)
