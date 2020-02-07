@@ -36,7 +36,7 @@ if __name__ == '__main__':
     # optimizer
     cross_entropy = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), config['lr'])
-    writer = SummaryWriter(log_dir=config.get('summary_log_dir', './tcc_log_{}:{}_{}-{}-{}'.format(now.hour, now.minute, now.day, now.month, now.year)))
+    writer = SummaryWriter(log_dir=config.get('summary_log_dir', './tcc_log_{}-{}_{}-{}-{}'.format(now.hour, now.minute, now.day, now.month, now.year)))
     save_path = config.get('save_path', './tcc_weights_{}-{}_{}-{}-{}'.format(now.hour, now.minute, now.day, now.month, now.year))
 
     step = 0
