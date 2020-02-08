@@ -6,6 +6,8 @@ from robosuite.environments.sawyer import SawyerEnv
 import robosuite
 import os
 import numpy as np
+from hem.robosuite import get_env
+from hem.datasets.encoders import Trajectory
 
 
 def _clip_delta(delta, max_step=0.015):
@@ -108,4 +110,27 @@ class PickPlaceController:
         
         self._t += 1
         return action
-    
+
+
+def get_expert_trajectory(env_type, camera_obs=True):
+    env = get_env(env_type)(has_renderer=False, reward_shaping=False, use_camera_obs=camera_obs)
+    controller = PickPlaceController(env)
+
+    np.random.seed()
+    obs = env.reset()
+    controller.reset()
+    success = False
+    while not success:
+        traj = Trajectory()
+        for _ in range(env.horizon):
+            action = controller.act(obs)
+            new_obs, reward, done, info = env.step(action)
+            traj.add(obs, reward, done, info, action)
+            obs = new_obs
+            if reward or done:
+                success = True
+                break
+
+        traj.log_final(obs)
+    return traj
+
