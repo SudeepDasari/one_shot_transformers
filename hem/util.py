@@ -22,3 +22,10 @@ def parse_basic_config(config_file):
 
     with open(os.path.expanduser(config_file), 'r') as config:
         return yaml.load(config, Loader=yaml.SafeLoader)
+
+
+def clean_dict(state_dict):
+    for k in list(state_dict.keys()):
+        if 'module' in k:
+            state_dict[k[7:]] = state_dict.pop(k)
+    return state_dict
