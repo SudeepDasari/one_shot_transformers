@@ -9,7 +9,6 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
 import numpy as np
 import datetime
-import time
 
 
 if __name__ == '__main__':
@@ -41,7 +40,7 @@ if __name__ == '__main__':
     save_path = config.get('save_path', './tcc_weights_{}-{}_{}-{}-{}'.format(now.hour, now.minute, now.day, now.month, now.year))
 
     step = 0
-    start = time.time()
+    loss_stat, accuracy_stat, error_stat = 0, 0, 0
     for _ in range(config.get('epochs', 10)):
         for t1, t2 in train_loader:
             t1, t2 = t1[1].to(device), t2[1].to(device)
@@ -60,19 +59,18 @@ if __name__ == '__main__':
             optimizer.step()
             
             # calculate iter stats
-            loss_stat = loss.item()
+            mod_step = step % config.get('log_freq', 10)
+            loss_stat = (loss.item() + mod_step * loss_stat) / (mod_step + 1)
             argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
-            accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
-            error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size']
+            accuracy_stat = (np.sum(argmaxes == chosen_i) / config['batch_size'] + mod_step * accuracy_stat) / (mod_step + 1)
+            error_stat = (np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size'] + mod_step * error_stat) / (mod_step + 1)
             
             end = '\r'
-            if step % config.get('log_freq', 10) == 0:
-                avg_time = (time.time() - start) / config.get('log_freq', 50)
+            if mod_step == config.get('log_freq', 10) - 1:
                 writer.add_scalar('loss/train', loss_stat, step)
                 writer.add_scalar('accuracy/train', accuracy_stat, step)
                 writer.add_scalar('error/train', error_stat, step)
                 writer.file_writer.flush()
-                start = time.time()
                 end = '\n'
             
             print('step {0}: loss={1:.4f} \t\t accuracy={2:2.3f} \t\t error={3:2.3f}'.format(step, loss_stat, accuracy_stat, error_stat), end=end)
