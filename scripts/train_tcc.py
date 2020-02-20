@@ -1,4 +1,4 @@
-from hem.parse_util import parse_basic_config
+from hem.util import parse_basic_config
 import torch
 import argparse
 from hem.datasets import get_dataset
@@ -53,7 +53,7 @@ if __name__ == '__main__':
             B, chosen_i = np.arange(config['batch_size']), np.random.randint(t1.shape[1], size=config['batch_size'])
             deltas = torch.sum((U[B,chosen_i][:,None] - V) ** 2, dim=2)
             v_hat = torch.sum(torch.nn.functional.softmax(-deltas, dim=1)[:,:,None] * V, dim=1)
-            class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)        
+            class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)
             
             loss = cross_entropy(class_logits, torch.from_numpy(chosen_i).to(device)) 
             loss.backward()
