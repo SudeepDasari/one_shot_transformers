@@ -30,9 +30,9 @@ class BasicEmbeddingModel(nn.Module):
         self._conv_4_2_n = norm_factory(512)
         self._pool_4 = nn.MaxPool2d(2)
 
-        self._conv_5_1 = nn.Conv3d(512, 512, k, padding=1)
+        self._conv_5_1 = nn.Conv3d(512, 512, k, padding=(2, 1, 1))
         self._conv_5_1_n = nn.BatchNorm3d(512) if batch_norm else lambda x: x
-        self._conv_5_2 = nn.Conv3d(512, 512, k, padding=1)
+        self._conv_5_2 = nn.Conv3d(512, 512, k, padding=(2, 1, 1))
         self._conv_5_2_n = nn.BatchNorm3d(512) if batch_norm else lambda x: x
         assert k % 2 == 1, "context must be odd"
         self._k = k 
@@ -63,8 +63,8 @@ class BasicEmbeddingModel(nn.Module):
         x = self._pool_4(x)
 
         x = torch.transpose(x.reshape((B, T, 512, x.shape[-2], x.shape[-1])), 1, 2)
-        x = F.relu(self._conv_5_1_n(self._conv_5_1(x)))
-        x = F.relu(self._conv_5_2_n(self._conv_5_2(x)))
+        x = F.relu(self._conv_5_1_n(self._conv_5_1(x)))[:,:,:-2,:,:]
+        x = F.relu(self._conv_5_2_n(self._conv_5_2(x)))[:,:,:-2,:,:]
         x = [x[:, :, max(0, t - self._k // 2): min(T, t + self._k // 2 + 1),:,:] for t in range(T)]
         x = [torch.max(torch.max(torch.max(t, 2)[0], 2)[0], 2)[0][:, None] for t in x]
         x = torch.cat(x, 1)
