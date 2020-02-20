@@ -38,6 +38,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), config['lr'])
     writer = SummaryWriter(log_dir=config.get('summary_log_dir', './tcc_log_{}-{}_{}-{}-{}'.format(now.hour, now.minute, now.day, now.month, now.year)))
     save_path = config.get('save_path', './tcc_weights_{}-{}_{}-{}-{}'.format(now.hour, now.minute, now.day, now.month, now.year))
+    n_saves = 0
 
     step = 0
     loss_stat, accuracy_stat, error_stat = 0, 0, 0
@@ -77,4 +78,5 @@ if __name__ == '__main__':
             step += 1
 
             if step % config.get('save_freq', 10000) == 0:
-                torch.save(model.state_dict(), save_path)
+                torch.save(model.state_dict(), save_path + '-{}'.format(n_saves))
+                n_saves += 1
