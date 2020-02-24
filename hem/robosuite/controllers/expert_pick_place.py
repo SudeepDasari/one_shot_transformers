@@ -8,6 +8,7 @@ import os
 import numpy as np
 from hem.robosuite import get_env
 from hem.datasets.encoders import Trajectory
+import pybullet as p
 
 
 def _clip_delta(delta, max_step=0.015):
@@ -111,14 +112,16 @@ class PickPlaceController:
         self._t += 1
         return action
 
+    def disconnect(self):
+        p.disconnect()
 
-def get_expert_trajectory(env_type, camera_obs=True):
-    env = get_env(env_type)(has_renderer=False, reward_shaping=False, use_camera_obs=camera_obs)
+
+def get_expert_trajectory(env_type, camera_obs=True, renderer=False):
+    np.random.seed()
+    env = get_env(env_type)(has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs)
+    obs = env.reset()
     controller = PickPlaceController(env)
 
-    np.random.seed()
-    obs = env.reset()
-    controller.reset()
     success = False
     while not success:
         traj = Trajectory()
@@ -130,7 +133,13 @@ def get_expert_trajectory(env_type, camera_obs=True):
             if reward or done:
                 success = True
                 break
+            if renderer:
+                env.render()
 
         traj.log_final(obs)
+    
+    if renderer:
+        env.close()
+    
+    controller.disconnect()
     return traj
-

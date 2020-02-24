@@ -8,7 +8,7 @@ import os
 import pickle as pkl
 
 
-def save_rollout(env_type, save_dir, camera_obs=True, N=0):
+def save_rollout(env_type, save_dir, camera_obs=True, N=0, renderer=False):
     if isinstance(N, int):
         N = [N]
 
@@ -16,7 +16,7 @@ def save_rollout(env_type, save_dir, camera_obs=True, N=0):
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
             continue
 
-        traj = get_expert_trajectory(env_type, camera_obs)
+        traj = get_expert_trajectory(env_type, camera_obs, renderer)
         pkl.dump(traj, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
 
@@ -28,6 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--N', default=10, type=int, help="Number of trajectories to collect")
     parser.add_argument('--env', default='SawyerPickPlaceCan', type=str, help="Environment name")
     parser.add_argument('--no_cam', action='store_true', help="If flag then will not collect camera observation")
+    parser.add_argument('--renderer', action='store_true', help="If flag then will display rendering GUI")
     args = parser.parse_args()
     assert args.num_workers > 0, "num_workers must be positive!"
 
@@ -37,8 +38,10 @@ if __name__ == '__main__':
         assert os.path.isdir(args.save_dir), "directory specified but is file and not directory!"
 
     if args.num_workers == 1:
-        save_rollout(args.env, args.save_dir, not args.no_cam, list(range(args.N)))
+        save_rollout(args.env, args.save_dir, not args.no_cam, list(range(args.N)), args.renderer)
     else:
+        assert not args.renderer, "can't display rendering when using multiple workers"
+
         with Pool(cpu_count()) as p:
             n_per = int(args.N // args.num_workers)
             jobs = [range(i * n_per, (i + 1) * n_per) for i in range(args.num_workers - 1)]
