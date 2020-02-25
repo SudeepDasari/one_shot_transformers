@@ -39,3 +39,4 @@ def get_env(env_name):
 
 
 from hem.robosuite.gym_wrapper import GymWrapper
+from hem.robosuite.mjc_util import postprocess_model_xml

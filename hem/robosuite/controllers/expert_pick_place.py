@@ -117,18 +117,26 @@ class PickPlaceController:
 
 
 def get_expert_trajectory(env_type, camera_obs=True, renderer=False):
-    np.random.seed()
-    env = get_env(env_type)(has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs)
-    obs = env.reset()
-    controller = PickPlaceController(env)
-
     success = False
     while not success:
-        traj = Trajectory()
+        np.random.seed()
+        env = get_env(env_type)(has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs)
+        obs = env.reset()
+
+        mjstate = env.sim.get_state().flatten()
+        sim_xml = env.model.get_xml()
+        env.reset_from_xml_string(sim_xml)
+        env.sim.reset()
+        env.sim.set_state_from_flattened(mjstate)
+        env.sim.forward()
+        controller = PickPlaceController(env)
+
+        traj = Trajectory(sim_xml)
         for _ in range(env.horizon):
             action = controller.act(obs)
             new_obs, reward, done, info = env.step(action)
-            traj.add(obs, reward, done, info, action)
+            traj.add(obs, reward, done, info, action, mjstate)
+            mjstate = env.sim.get_state().flatten()
             obs = new_obs
             if reward or done:
                 success = True
@@ -136,7 +144,7 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False):
             if renderer:
                 env.render()
 
-        traj.log_final(obs)
+        traj.log_final(obs, mjstate)
     
     if renderer:
         env.close()

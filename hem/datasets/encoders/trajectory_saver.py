@@ -18,18 +18,22 @@ def _decompress_obs(obs):
 
 
 class Trajectory:
-    def __init__(self):
+    def __init__(self, sim_xml=None):
         self._data = []
+        self._mj_state = []
         self._actions = []
         self._final_obs = None
+        self._sim_xml = sim_xml
     
-    def add(self, obs, reward, done, info, action=None):
+    def add(self, obs, reward, done, info, action=None, mj_state=None):
         obs = _compress_obs(obs)
         self._data.append(copy.deepcopy((obs, reward, done, info)))
         self._actions.append(action)
+        self._mj_state.append(copy.deepcopy(mj_state))
 
-    def log_final(self, obs):
+    def log_final(self, obs, mj_state=None):
         self._final_obs = _compress_obs(obs)
+        self._mj_state.append(copy.deepcopy(mj_state))
 
     @property
     def T(self):
@@ -56,3 +60,14 @@ class Trajectory:
     def __iter__(self):
         for d in range(self.T + 1):
             yield self.get(d)
+
+    def get_sim_state(self, t):
+        assert 0 <= t < self.T + 1, "index should be in [0, T]"
+        return copy.deepcopy(self._mj_state[t])
+
+    def log_xml(self, xml_str):
+        self._sim_xml = xml_str
+
+    @property
+    def sim_xml(self):
+        return self._sim_xml
