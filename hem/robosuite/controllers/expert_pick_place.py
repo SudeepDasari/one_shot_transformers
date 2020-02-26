@@ -125,6 +125,7 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False):
 
         mjstate = env.sim.get_state().flatten()
         sim_xml = env.model.get_xml()
+
         env.reset_from_xml_string(sim_xml)
         env.sim.reset()
         env.sim.set_state_from_flattened(mjstate)

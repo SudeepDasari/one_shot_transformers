@@ -46,7 +46,7 @@ class BaxterPickPlace(BaxterEnv):
         control_freq=10,
         horizon=1000,
         ignore_done=False,
-        camera_name="highpovfront",
+        camera_name="frontview",
         camera_height=256,
         camera_width=256,
         camera_depth=False,
@@ -190,20 +190,9 @@ class BaxterPickPlace(BaxterEnv):
         self.mujoco_arena.set_origin([.5, -0.4, 0])
 
         self.ob_inits = [MilkObject, BreadObject, CerealObject, CanObject]
-        self.vis_inits = [
-            MilkVisualObject,
-            BreadVisualObject,
-            CerealVisualObject,
-            CanVisualObject,
-        ]
         self.item_names = ["Milk", "Bread", "Cereal", "Can"]
         self.item_names_org = list(self.item_names)
         self.obj_to_use = (self.item_names[0] + "{}").format(0)
-
-        lst = []
-        for j in range(len(self.vis_inits)):
-            lst.append((str(self.vis_inits[j]), self.vis_inits[j]()))
-        self.visual_objects = lst
 
         lst = []
         for i in range(len(self.ob_inits)):
@@ -218,7 +207,7 @@ class BaxterPickPlace(BaxterEnv):
             self.mujoco_arena,
             self.mujoco_robot,
             self.mujoco_objects,
-            self.visual_objects,
+            [],
         )
         self.model.place_objects()
         self.model.place_visual()
@@ -277,6 +266,12 @@ class BaxterPickPlace(BaxterEnv):
             bin_x_low += self.bin_size[0] / 4.
             bin_y_low += self.bin_size[1] / 4.
             self.target_bin_placements[j, :] = [bin_x_low, bin_y_low, self.bin_pos[2]]
+        
+        if self.single_object_mode  == 2:
+            # randomly target bins if in single_object_mode==2
+            self._bin_mappings = np.arange(len(self.ob_inits))
+            np.random.shuffle(self._bin_mappings)
+            self.target_bin_placements = self.target_bin_placements[self._bin_mappings]
 
     def _reset_internal(self):
         super()._reset_internal()
@@ -291,7 +286,9 @@ class BaxterPickPlace(BaxterEnv):
             self.clear_objects(self.obj_to_use)
 
     def reward(self, action=None):
-        # compute sparse rewards
+        if self.single_object_mode == 2:
+            return float(self._check_success())
+
         self._check_success()
         reward = np.sum(self.objects_in_bins)
 
@@ -497,6 +494,9 @@ class BaxterPickPlace(BaxterEnv):
 
             di["object-state"] = np.concatenate([di[k] for k in object_state_keys])
 
+        if self.single_object_mode == 2:
+            di['target-box-id'] = self._bin_mappings[self.object_id]
+
         return di
 
     def _check_contact(self):
@@ -517,6 +517,10 @@ class BaxterPickPlace(BaxterEnv):
         """
         Returns True if task has been completed.
         """
+        if self.single_object_mode == 2:
+            obj_str = str(self.item_names[self.object_id]) + "0"
+            obj_pos = self.sim.data.body_xpos[self.obj_body_id[obj_str]]
+            return not self.not_in_bin(obj_pos, self._bin_mappings[self.object_id])
 
         # remember objects that are in the correct bins
         gripper_site_pos = self.sim.data.site_xpos[self.eef_site_id]
@@ -530,7 +534,7 @@ class BaxterPickPlace(BaxterEnv):
             )
 
         # returns True if a single object is in the correct bin
-        if self.single_object_mode == 1 or self.single_object_mode == 2:
+        if self.single_object_mode == 1:
             return np.sum(self.objects_in_bins) > 0
 
         # returns True if all objects are in correct bins

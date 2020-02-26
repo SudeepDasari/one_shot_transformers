@@ -47,5 +47,5 @@ if __name__ == '__main__':
             jobs = [range(i * n_per, (i + 1) * n_per) for i in range(args.num_workers - 1)]
             jobs.append(range((args.num_workers - 1) * n_per, args.N))
             
-            f = functools.partial(save_rollout, args.env, args.save_dir, not args.no_cam)
+            f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam)
             p.map(f, jobs)
