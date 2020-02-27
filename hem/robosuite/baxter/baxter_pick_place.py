@@ -50,6 +50,7 @@ class BaxterPickPlace(BaxterEnv):
         camera_height=256,
         camera_width=256,
         camera_depth=False,
+        randomize_goal=False
     ):
         """
         Args:
@@ -99,7 +100,10 @@ class BaxterPickPlace(BaxterEnv):
             camera_width (int): width of camera frame.
             camera_depth (bool): True if rendering RGB-D, and RGB otherwise.
         """
-
+        self._randomize_goal = randomize_goal
+        if randomize_goal:
+            assert single_object_mode == 2, "only  works with single_object_mode==2!"
+        
         # task settings
         self.single_object_mode = single_object_mode
         self.object_to_id = {"milk": 0, "bread": 1, "cereal": 2, "can": 3}
@@ -274,7 +278,8 @@ class BaxterPickPlace(BaxterEnv):
         if self.single_object_mode  == 2:
             # randomly target bins if in single_object_mode==2
             self._bin_mappings = np.arange(len(self.object_to_id.keys()))
-            np.random.shuffle(self._bin_mappings)
+            if self._randomize_goal:
+                np.random.shuffle(self._bin_mappings)
         super()._reset_internal()
 
         # reset positions of objects, and move objects out of the scene depending on the mode

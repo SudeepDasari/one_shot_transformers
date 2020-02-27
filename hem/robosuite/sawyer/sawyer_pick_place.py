@@ -21,6 +21,12 @@ import numpy as np
 
 
 class SawyerPickPlace(DefaultSawyerPickPlace):
+    def __init__(self, randomize_goal=False, single_object_mode=0, **kwargs):
+        self._randomize_goal = randomize_goal
+        if randomize_goal:
+            assert single_object_mode == 2, "only  works with single_object_mode==2!"
+        super().__init__(single_object_mode=single_object_mode, **kwargs)
+
     def _get_reference(self):
         super()._get_reference()
         if self.single_object_mode == 2:
@@ -30,7 +36,8 @@ class SawyerPickPlace(DefaultSawyerPickPlace):
         if self.single_object_mode  == 2:
             # randomly target bins if in single_object_mode==2
             self._bin_mappings = np.arange(len(self.object_to_id.keys()))
-            np.random.shuffle(self._bin_mappings)
+            if self._randomize_goal:
+                np.random.shuffle(self._bin_mappings)
         super()._reset_internal()
     
     def reward(self, action=None):
