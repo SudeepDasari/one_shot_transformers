@@ -69,5 +69,5 @@ class Trajectory:
         self._config_str = config_str
 
     @property
-    def sim_xml(self):
+    def config_str(self):
         return self._config_str

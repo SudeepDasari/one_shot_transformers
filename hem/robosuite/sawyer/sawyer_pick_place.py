@@ -23,11 +23,15 @@ import numpy as np
 class SawyerPickPlace(DefaultSawyerPickPlace):
     def _get_reference(self):
         super()._get_reference()
+        if self.single_object_mode == 2:
+            self.target_bin_placements = self.target_bin_placements[self._bin_mappings]
+
+    def _reset_internal(self):
         if self.single_object_mode  == 2:
             # randomly target bins if in single_object_mode==2
-            self._bin_mappings = np.arange(len(self.ob_inits))
+            self._bin_mappings = np.arange(len(self.object_to_id.keys()))
             np.random.shuffle(self._bin_mappings)
-            self.target_bin_placements = self.target_bin_placements[self._bin_mappings]
+        super()._reset_internal()
     
     def reward(self, action=None):
         if self.single_object_mode == 2:
