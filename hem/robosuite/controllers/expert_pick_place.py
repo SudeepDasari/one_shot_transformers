@@ -7,7 +7,7 @@ import robosuite
 import os
 import numpy as np
 from hem.robosuite import get_env
-from hem.datasets.encoders import Trajectory
+from hem.datasets import Trajectory
 import pybullet as p
 
 
@@ -122,30 +122,28 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False):
         np.random.seed()
         env = get_env(env_type)(has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs)
         obs = env.reset()
-
-        mjstate = env.sim.get_state().flatten()
+        mj_state = env.sim.get_state().flatten()
         sim_xml = env.model.get_xml()
+        traj = Trajectory(sim_xml)
 
         env.reset_from_xml_string(sim_xml)
         env.sim.reset()
-        env.sim.set_state_from_flattened(mjstate)
+        env.sim.set_state_from_flattened(mj_state)
         env.sim.forward()
         controller = PickPlaceController(env)
 
-        traj = Trajectory(sim_xml)
+        traj.append(obs, raw_state=mj_state)
         for _ in range(env.horizon):
             action = controller.act(obs)
-            new_obs, reward, done, info = env.step(action)
-            traj.add(obs, reward, done, info, action, mjstate)
-            mjstate = env.sim.get_state().flatten()
-            obs = new_obs
+            obs, reward, done, info = env.step(action)
+            mj_state = env.sim.get_state().flatten()
+            traj.append(obs, reward, done, info, action, mj_state)
+            
             if reward or done:
                 success = True
                 break
             if renderer:
                 env.render()
-
-        traj.log_final(obs, mjstate)
     
     if renderer:
         env.close()

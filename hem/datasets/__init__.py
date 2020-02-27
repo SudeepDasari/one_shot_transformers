@@ -1,3 +1,6 @@
+from hem.datasets.savers.trajectory import Trajectory
+
+
 def get_dataset(name):
     if name == 'something something':
         from .something_dataset import SomethingSomething
