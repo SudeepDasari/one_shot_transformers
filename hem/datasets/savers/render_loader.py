@@ -26,14 +26,22 @@ class ImageRenderWrapper:
     def _get_sim(self):
         if self._sim is not None:
             return self._sim
+
         xml = postprocess_model_xml(self._traj.config_str)
-        sim = MjSim(load_model_from_xml(xml))
-        render_context = MjRenderContextOffscreen(sim)
-        render_context.vopt.geomgroup[0] = 0
-        render_context.vopt.geomgroup[1] = 1 
-        sim.add_render_context(render_context)
-        self._sim = sim
-        return sim
+        if 'sawyer' in xml and 'can' in xml:
+            from hem.datasets.precompiled_models.sawyer_can import models
+            self._sim = models[0]
+        elif 'baxter' in xml and 'can' in xml:
+            from hem.datasets.precompiled_models.baxter_can import models
+            self._sim = models[0]
+        else:
+            sim = MjSim(load_model_from_xml(xml))
+            render_context = MjRenderContextOffscreen(sim)
+            render_context.vopt.geomgroup[0] = 0
+            render_context.vopt.geomgroup[1] = 1 
+            sim.add_render_context(render_context)
+            self._sim = sim
+        return self._sim
 
     def __getitem__(self, t):
         return self.get(t)

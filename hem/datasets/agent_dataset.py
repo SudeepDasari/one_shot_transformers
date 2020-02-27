@@ -110,3 +110,10 @@ if __name__ == '__main__':
             break
         start = time.time()
     print('avg ex time', sum(timings) / len(timings) / batch_size)
+
+    out = imageio.get_writer('out1.gif')
+    for t in range(context.shape[1]):
+        frame = [np.transpose(fr, (1, 2, 0)) for fr in context[:, t]]
+        frame = np.concatenate(frame, 1)
+        out.append_data(frame.astype(np.uint8))
+    out.close()
