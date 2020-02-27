@@ -19,4 +19,7 @@ class AgentTeacherDataset(Dataset):
 
         a_idx = index % len(self._agent_dataset)
         t_idx = int(index // len(self._agent_dataset))
-        return self._agent_dataset[a_idx], self._teacher_dataset[t_idx]
+
+        agent_pairs, agent_context = self._agent_dataset[a_idx]
+        _, teacher_context = self._teacher_dataset[t_idx]
+        return teacher_context, agent_context, agent_pairs

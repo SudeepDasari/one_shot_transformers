@@ -43,8 +43,8 @@ if __name__ == '__main__':
     step = 0
     loss_stat, accuracy_stat, error_stat = 0, 0, 0
     for _ in range(config.get('epochs', 10)):
-        for t1, t2 in train_loader:
-            t1, t2 = t1[1].to(device), t2[1].to(device)
+        for t1, t2, _ in train_loader:
+            t1, t2 = t1.to(device), t2.to(device)
             optimizer.zero_grad()
 
             U = model(t1)

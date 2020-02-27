@@ -6,6 +6,7 @@ import random
 import os
 import torch
 from hem.datasets.util import resize
+from hem.datasets.savers.render_loader import ImageRenderWrapper
 import random
 import numpy as np
 
@@ -17,7 +18,6 @@ class AgentDemonstrations(Dataset):
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2, "Must be at least 2 frames in context!"
         assert T_pair >= 1, "Each state/action pair must have at least 1 time-step"
-        assert N_pair >= 1, "Must return at least 1 pair"
 
         shuffle_rng = random.Random(SHUFFLE_RNG)
         all_files = sorted(glob.glob('{}/*.pkl'.format(os.path.expanduser(root_dir))))
@@ -45,11 +45,14 @@ class AgentDemonstrations(Dataset):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
 
-        traj = pkl.load(open(self._files[index], 'rb'))
+        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._im_dims[1] * 2, self._im_dims[0] * 2)
+        return self._proc_traj(traj)
+
+    def _proc_traj(self, traj):
         context_frames = self._make_context(traj)
 
         base_pair = {}
-        for n in range(self._N_pair):
+        for _ in range(self._N_pair):
             for k, v in self._get_pair(traj).items():
                 if isinstance(v, dict):
                     value_dict = base_pair.get(k, {})
@@ -76,31 +79,34 @@ class AgentDemonstrations(Dataset):
         for i in range(1, self._T_context - 1):
             n = random.randint(clip(i * per_bracket), clip((i + 1) * per_bracket - 1))
             frames.append(resize(traj.get(n)['obs']['image'], self._im_dims, self._normalize)[None])
-        frames.append(resize(traj.get(len(traj))['obs']['image'], self._im_dims, self._normalize)[None])
+        frames.append(resize(traj.get(len(traj) - 1)['obs']['image'], self._im_dims, self._normalize)[None])
         return np.transpose(np.concatenate(frames, 0), (0, 3, 1, 2))
 
     def _get_pair(self, traj):
         pair = {}
-        i = random.randint(0, len(traj) - self._T_pair)
-        for j in range(self._T_pair):
+        i = random.randint(0, len(traj) - self._T_pair - 1)
+        for j in range(self._T_pair + 1):
             t = traj.get(j + i)
             pair['s_{}'.format(j)] = dict(image=resize(t['obs']['image'], self._im_dims, self._normalize), state=t['obs']['robot-state'])
-            pair['a_{}'.format(j)] = t['action']
-        t = traj.get(self._T_pair + i)
-        pair['s_{}'.format(self._T_pair)] = dict(image=resize(t['obs']['image'], self._im_dims, self._normalize), state=t['obs']['robot-state'])
+            if j:
+                pair['a_{}'.format(j)] = t['action']
         return pair
 
 if __name__ == '__main__':
+    import time
     import imageio
     from torch.utils.data import DataLoader
-    ag = AgentDemonstrations('~/test_baxter')
-    loader = DataLoader(ag, batch_size = 10)
+    batch_size = 10
+    ag = AgentDemonstrations('./test_load', normalize=False)
+    loader = DataLoader(ag, batch_size = batch_size, num_workers=8)
 
+    start = time.time()
+    timings = []
     for pairs, context in loader:
-        out = imageio.get_writer('out1.gif')
-        for t in range(context.shape[1]):
-            frame = [np.transpose(fr, (1, 2, 0)) for fr in context[:, t]]
-            frame = np.concatenate(frame, 1)
-            out.append_data(frame)
-        out.close()
+        timings.append(time.time() - start)
         print(context.shape)
+
+        if len(timings) > 40:
+            break
+        start = time.time()
+    print('avg ex time', sum(timings) / len(timings) / batch_size)
