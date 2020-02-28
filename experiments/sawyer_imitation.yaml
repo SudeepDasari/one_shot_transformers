@@ -1,0 +1,16 @@
+batch_size: 16
+lr: 0.001
+epochs: 20
+
+dataset:
+  type: "agent"
+  root_dir: ${ROBOT_DIR}/sawyer_can
+  height: 112
+  width: 112
+  T_context: 0
+  T_pair: 40
+
+model:
+  type: "base rnn"
+  in_dim: 512
+  out_dim: 7

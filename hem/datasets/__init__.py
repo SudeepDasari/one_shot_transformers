@@ -8,6 +8,9 @@ def get_dataset(name):
     elif name == 'agent teacher':
         from .agent_teacher_dataset import AgentTeacherDataset
         return AgentTeacherDataset
+    elif name == 'agent':
+        from .agent_dataset import AgentDemonstrations
+        return AgentDemonstrations
     raise NotImplementedError
 
 

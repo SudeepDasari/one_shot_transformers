@@ -13,10 +13,10 @@ import numpy as np
 
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
-    def __init__(self, root_dir, height=224, width=224, normalize=True, T_context=15, T_pair=1, N_pair=2, mode='train', split=[0.9, 0.1]):
+    def __init__(self, root_dir, height=224, width=224, normalize=True, T_context=15, T_pair=1, N_pair=1, mode='train', split=[0.9, 0.1]):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
-        assert T_context >= 2, "Must be at least 2 frames in context!"
+        assert T_context >= 2 or N_pair > 0, "Must return (s,a) pairs or context!"
         assert T_pair >= 1, "Each state/action pair must have at least 1 time-step"
 
         shuffle_rng = random.Random(SHUFFLE_RNG)
@@ -49,8 +49,15 @@ class AgentDemonstrations(Dataset):
         return self._proc_traj(traj)
 
     def _proc_traj(self, traj):
-        context_frames = self._make_context(traj)
+        context_frames = []
+        if self._T_context:
+            context_frames = self._make_context(traj)
 
+        if self._N_pair == 0:
+            return {}, context_frames
+        elif self._N_pair == 1:
+            return self._get_pair(traj), context_frames
+        
         base_pair = {}
         for _ in range(self._N_pair):
             for k, v in self._get_pair(traj).items():
@@ -87,7 +94,8 @@ class AgentDemonstrations(Dataset):
         i = random.randint(0, len(traj) - self._T_pair - 1)
         for j in range(self._T_pair + 1):
             t = traj.get(j + i)
-            pair['s_{}'.format(j)] = dict(image=resize(t['obs']['image'], self._im_dims, self._normalize), state=t['obs']['robot-state'])
+            img = resize(t['obs']['image'], self._im_dims, self._normalize)
+            pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=t['obs']['robot-state'])
             if j:
                 pair['a_{}'.format(j)] = t['action']
         return pair
