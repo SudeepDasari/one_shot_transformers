@@ -14,7 +14,8 @@ class MixtureDensityTop(nn.Module):
         self._sigma_inv = nn.Linear(in_dim, n_mixtures)
     
     def forward(self, inputs):
-        mean = self._mean(inputs).reshape((inputs.shape[0], self._n_mixtures, self._out_dim))
+        prev_shape = inputs.shape[:-1]
+        mean = self._mean(inputs).reshape(list(prev_shape) + [self._n_mixtures, self._out_dim])
         sigma_inv = torch.exp(self._sigma_inv(inputs))
         alpha = F.softmax(self._alpha(inputs), 1)
 
@@ -22,10 +23,10 @@ class MixtureDensityTop(nn.Module):
 
 
 def mixture_density_loss(real, mean, sigma_inv, alpha, eps=1e-5):
-    C = real.shape[1]
-    exp_term = -0.5 * torch.sum(torch.square(real[:, None] - mean), -1) * torch.square(sigma_inv)
+    C = real.shape[-1]
+    exp_term = -0.5 * torch.sum(((real.unsqueeze(-2) - mean) ** 2), -1) * (sigma_inv ** 2)
     ln_frac_term = torch.log(alpha * sigma_inv + eps) - 0.5 * C * np.log(np.pi)
-    expected_loss = -torch.logsumexp(ln_frac_term + exp_term, 1)
+    expected_loss = -torch.logsumexp(ln_frac_term + exp_term, -1)
     return torch.mean(expected_loss)
 
 

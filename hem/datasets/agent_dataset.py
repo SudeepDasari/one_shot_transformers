@@ -97,7 +97,7 @@ class AgentDemonstrations(Dataset):
             img = resize(t['obs']['image'], self._im_dims, self._normalize)
             pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=t['obs']['robot-state'])
             if j:
-                pair['a_{}'.format(j)] = t['action']
+                pair['a_{}'.format(j)] = t['action'].astype(np.float32)
         return pair
 
 if __name__ == '__main__':

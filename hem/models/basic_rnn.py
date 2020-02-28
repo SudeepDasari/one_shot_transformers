@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
@@ -32,4 +33,4 @@ class BaseRNN(nn.Module):
             else:
                 x = x.reshape((L, B, self._in_dim))
 
-        return self._gru(x)
+        return self._gru(x)[0]
