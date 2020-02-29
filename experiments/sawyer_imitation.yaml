@@ -1,14 +1,15 @@
-batch_size: 16
-lr: 0.001
-epochs: 20
+batch_size: 8
+lr: 0.0001
+epochs: 200
+loader_workers: 40
 
 dataset:
   type: "agent"
-  root_dir: ${ROBOT_DIR}/sawyer_can
+  root_dir: ${ROBOT_DIR}/sawyer
   height: 112
   width: 112
   T_context: 0
-  T_pair: 40
+  T_pair: 20
 
 model:
   type: "base rnn"
