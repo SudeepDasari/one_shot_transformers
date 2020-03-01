@@ -18,7 +18,6 @@ class MixtureDensityTop(nn.Module):
         mean = self._mean(inputs).reshape(list(prev_shape) + [self._n_mixtures, self._out_dim])
         sigma_inv = torch.exp(self._sigma_inv(inputs))
         alpha = F.softmax(self._alpha(inputs), -1)
-
         return mean, sigma_inv, alpha
 
 
