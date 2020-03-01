@@ -1,13 +1,13 @@
-batch_size: 8
-lr: 0.0001
-epochs: 200
-loader_workers: 40
+batch_size: 16
+lr: 0.001
+epochs: 400
+loader_workers: 8
 
 dataset:
   type: "agent"
   root_dir: ${ROBOT_DIR}/sawyer
-  height: 112
-  width: 112
+  height: 224
+  width: 224
   T_context: 0
   T_pair: 20
 
