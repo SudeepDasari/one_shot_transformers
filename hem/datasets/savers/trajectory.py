@@ -27,9 +27,11 @@ class Trajectory:
         """
         Logs observation and rewards taken by environment as well as action taken
         """
+        obs, reward, done, info, action, raw_state = [copy.deepcopy(x) for x in [obs, reward, done, info, action, raw_state]]
+
         obs = _compress_obs(obs)
-        self._data.append(copy.deepcopy((obs, reward, done, info, action)))
-        self._raw_state.append(copy.deepcopy(raw_state))
+        self._data.append((obs, reward, done, info, action))
+        self._raw_state.append(raw_state)
 
     @property
     def T(self):

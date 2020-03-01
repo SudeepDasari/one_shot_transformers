@@ -17,7 +17,7 @@ class MixtureDensityTop(nn.Module):
         prev_shape = inputs.shape[:-1]
         mean = self._mean(inputs).reshape(list(prev_shape) + [self._n_mixtures, self._out_dim])
         sigma_inv = torch.exp(self._sigma_inv(inputs))
-        alpha = F.softmax(self._alpha(inputs), 1)
+        alpha = F.softmax(self._alpha(inputs), -1)
 
         return mean, sigma_inv, alpha
 
@@ -37,3 +37,15 @@ class MixtureDensityLoss(nn.Module):
 
     def forward(self, real, mean, sigma_inv, alpha):
         return mixture_density_loss(real, mean, sigma_inv, alpha, self._eps)
+
+
+class MixtureDensitySampler:
+    def __init__(self, model):
+        self._mdn_model = model
+    
+    def forward(self, inputs):
+        mean, sigma_inv, alpha = self._mdn_model(inputs)
+        import pdb; pdb.set_trace()
+    
+    def __call__(self, inputs):
+        return self.forward(inputs)
