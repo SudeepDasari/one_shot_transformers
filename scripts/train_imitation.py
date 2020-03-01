@@ -17,11 +17,13 @@ if __name__ == '__main__':
     now = datetime.datetime.now()
     parser = argparse.ArgumentParser(description="test")
     parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
+    parser.add_argument('--device', type=int, default=None, help='target device (uses all if not specified)')
     args = parser.parse_args()
     config = parse_basic_config(args.experiment_file)
     
     # initialize device
-    device = torch.device("cuda:0")
+    def_device = 0 if args.device is None else args.device
+    device = torch.device("cuda:{}".format(def_device))
 
     # parse dataset
     dataset_class = get_dataset(config['dataset'].pop('type'))
@@ -30,12 +32,12 @@ if __name__ == '__main__':
     
     # parser model
     model_class = get_model(config['model'].pop('type'))
-    model = model_class(**config['model'])
-    if torch.cuda.device_count() > 1:
+    base_model = model_class(**config['model'])
+    mdn = MixtureDensityTop(**config['mdn'])
+    model = nn.Sequential(base_model, mdn)
+    if torch.cuda.device_count() > 1 and args.device is None:
         model = nn.DataParallel(model)
     model.to(device)
-    mdn = MixtureDensityTop(**config['mdn'])
-    mdn.to(device)
 
     # optimizer
     loss = MixtureDensityLoss()
@@ -50,7 +52,7 @@ if __name__ == '__main__':
         for pairs, _ in train_loader:
             optimizer.zero_grad()
             states, actions = batch_inputs(pairs, device)
-            mean, sigma_inv, alpha = mdn(model(states['images'][:,:-1]))
+            mean, sigma_inv, alpha = model(states['images'][:,:-1])
             l_i = loss(actions, mean, sigma_inv, alpha)
             l_i.backward()
             optimizer.step()
