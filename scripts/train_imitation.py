@@ -64,7 +64,6 @@ if __name__ == '__main__':
             mod_step = step % config.get('log_freq', 10)
             loss_stat = (l_i.item() + mod_step * loss_stat) / (mod_step + 1)
             
-            end = '\r'
             if mod_step == config.get('log_freq', 50) - 1:
                 try:
                     val_pairs, _ = next(val_iter)
@@ -78,9 +77,9 @@ if __name__ == '__main__':
                 writer.add_scalar('loss/val', val_l.item(), step)
                 writer.add_scalar('loss/train', loss_stat, step)
                 writer.file_writer.flush()
-                end = '\n'
-            
-            print('step {0}: loss={1:.4f}'.format(step, loss_stat), end=end)
+                print('step {0}: loss={1:.4f} \t val loss={1:.4f}'.format(step, loss_stat, val_l.item()))
+            else:
+                print('step {0}: loss={1:.4f}'.format(step, loss_stat))
             step += 1
 
             if step % config.get('save_freq', 5000) == 0:
