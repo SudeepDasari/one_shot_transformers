@@ -28,7 +28,9 @@ if __name__ == '__main__':
     # parse dataset
     dataset_class = get_dataset(config['dataset'].pop('type'))
     dataset = dataset_class(**config['dataset'], mode='train')
+    val_dataset = dataset_class(**config['dataset'], mode='val')
     train_loader = DataLoader(dataset, batch_size=config['batch_size'], shuffle=True, num_workers=config.get('loader_workers', cpu_count()))
+    val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=1)
     
     # parser model
     model_class = get_model(config['model'].pop('type'))
@@ -48,6 +50,7 @@ if __name__ == '__main__':
 
     step = 0
     loss_stat = 0
+    val_iter = iter(val_loader)
     for _ in range(config.get('epochs', 10)):
         for pairs, _ in train_loader:
             optimizer.zero_grad()
@@ -62,7 +65,17 @@ if __name__ == '__main__':
             loss_stat = (l_i.item() + mod_step * loss_stat) / (mod_step + 1)
             
             end = '\r'
-            if mod_step == config.get('log_freq', 10) - 1:
+            if mod_step == config.get('log_freq', 50) - 1:
+                try:
+                    val_pairs, _ = next(val_iter)
+                except StopIteration:
+                    val_iter = iter(val_loader)
+                    val_pairs, _ = next(val_iter)
+                states, actions = batch_inputs(val_pairs, device)
+                mean, sigma_inv, alpha = model(states['images'][:,:-1])
+                val_l = loss(actions, mean, sigma_inv, alpha)
+
+                writer.add_scalar('loss/val', val_l.item(), step)
                 writer.add_scalar('loss/train', loss_stat, step)
                 writer.file_writer.flush()
                 end = '\n'
@@ -70,6 +83,5 @@ if __name__ == '__main__':
             print('step {0}: loss={1:.4f}'.format(step, loss_stat), end=end)
             step += 1
 
-            if step % config.get('save_freq', 10000) == 0:
-                torch.save(model.state_dict(), save_path + '-{}'.format(n_saves))
-                n_saves += 1
+            if step % config.get('save_freq', 5000) == 0:
+                torch.save(model.state_dict(), save_path + '-{}'.format(step))

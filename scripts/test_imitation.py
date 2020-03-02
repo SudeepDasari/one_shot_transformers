@@ -11,10 +11,11 @@ import numpy as np
 import cv2
 from hem.datasets import Trajectory
 from hem.robosuite import get_env
+import imageio
+from tqdm import tqdm
 
 
 def rollout_bc(policy, env_type, device, N=10, height=224, widht=224, horizon=20):
-    import pdb; pdb.set_trace()
     trajs = []
     for _ in range(N):
         np.random.seed()
@@ -24,14 +25,14 @@ def rollout_bc(policy, env_type, device, N=10, height=224, widht=224, horizon=20
         traj = Trajectory()
         traj.append(obs)
         past_obs = []
-        for _ in range(env.horizon):
+        for _ in tqdm(range(env.horizon)):
             past_obs.append(np.transpose(resize(obs['image'], (width, height), True), (2, 0, 1))[None])
             if len(past_obs) > horizon:
                 past_obs = past_obs[1:]
             
             policy_in = torch.from_numpy(np.concatenate(past_obs, 0)[None]).to(device)
             with torch.no_grad():
-                action = policy(policy_in).cpu().numpy()
+                action = policy(policy_in)[0]
             
             obs, reward, done, info = env.step(action)
             traj.append(obs, reward, done, info, action)
@@ -72,25 +73,9 @@ if __name__ == '__main__':
     width = config['dataset'].get('height', 224)
     T = config['dataset'].get('T_pair', 20)
     rollouts = rollout_bc(MixtureDensitySampler(model), args.env, device, args.N, height, width, T)
-    
-    images = np.concatenate([env1_traj] + env2_trajs, 0)
-    with torch.no_grad():
-        embeds = model(torch.from_numpy(images).to(device)).cpu().numpy()
 
-    env1_vid, env2_vids = images[0], images[1:]
-    env1_embed = embeds[0]
-    env2_embeds = embeds[1:]
-
-    all_images = []
-    for t in range(env1_embed.shape[0]):
-        deltas = np.sum(np.square(env1_embed[t][None,None] - env2_embeds), -1)
-        order = deltas.reshape(-1).argsort()
-
-        img_t = _to_uint(env1_vid[t])
-        for o in order[:10]:
-            traj, traj_t = int(o // env1_embed.shape[0]), o % env1_embed.shape[0]
-            img_t = np.concatenate((img_t, _to_uint(env2_vids[traj, traj_t])), 0)
-        all_images.append(img_t)
-        if t != env1_embed.shape[0] - 1:
-            all_images.append(np.zeros((img_t.shape[0], 3, 3), dtype=np.uint8))
-    cv2.imwrite('compars.jpg', np.concatenate(all_images, 1)[:,:,::-1])
+    for i, traj in enumerate(rollouts):
+        out = imageio.get_writer('out{}.gif'.format(i))
+        for t in traj:
+            out.append_data(t['obs']['image'])
+        out.close()
