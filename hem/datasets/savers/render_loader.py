@@ -35,12 +35,15 @@ class ImageRenderWrapper:
             from hem.datasets.precompiled_models.baxter_can import models
             self._sim = models[0]
         else:
+            model = load_model_from_xml(xml)
+            model.vis.quality.offsamples = 8
             sim = MjSim(load_model_from_xml(xml))
             render_context = MjRenderContextOffscreen(sim)
             render_context.vopt.geomgroup[0] = 0
             render_context.vopt.geomgroup[1] = 1 
             sim.add_render_context(render_context)
             self._sim = sim
+
         return self._sim
 
     def __getitem__(self, t):

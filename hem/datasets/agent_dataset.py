@@ -45,7 +45,7 @@ class AgentDemonstrations(Dataset):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
 
-        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._im_dims[1] * 2, self._im_dims[0] * 2)
+        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._im_dims[1], self._im_dims[0])
         return self._proc_traj(traj)
 
     def _proc_traj(self, traj):
@@ -114,7 +114,7 @@ if __name__ == '__main__':
         timings.append(time.time() - start)
         print(context.shape)
 
-        if len(timings) > 40:
+        if len(timings) > 1:
             break
         start = time.time()
     print('avg ex time', sum(timings) / len(timings) / batch_size)
