@@ -61,18 +61,21 @@ if __name__ == '__main__':
             optimizer.step()
             
             # calculate iter stats
-            mod_step = step % config.get('log_freq', 10)
+            log_freq = config.get('log_freq', 20)
+            mod_step = step % log_freq
             loss_stat = (l_i.item() + mod_step * loss_stat) / (mod_step + 1)
-            
-            if mod_step == config.get('log_freq', 50) - 1:
+                        
+            if mod_step == log_freq - 1:
                 try:
                     val_pairs, _ = next(val_iter)
                 except StopIteration:
                     val_iter = iter(val_loader)
                     val_pairs, _ = next(val_iter)
-                states, actions = batch_inputs(val_pairs, device)
-                mean, sigma_inv, alpha = model(states['images'][:,:-1])
-                val_l = loss(actions, mean, sigma_inv, alpha)
+
+                with torch.no_grad():
+                    states, actions = batch_inputs(val_pairs, device)
+                    mean, sigma_inv, alpha = model(states['images'][:,:-1])
+                    val_l = loss(actions, mean, sigma_inv, alpha)
 
                 writer.add_scalar('loss/val', val_l.item(), step)
                 writer.add_scalar('loss/train', loss_stat, step)
