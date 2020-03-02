@@ -183,6 +183,10 @@ class SawyerPickPlace(DefaultSawyerPickPlace):
 
         return di
 
+    def initialize_time(self, control_freq):
+        self.sim.model.vis.quality.offsamples = 8
+        super().initialize_time(control_freq)
+
 
 class SawyerPickPlaceSingle(SawyerPickPlace):
     """

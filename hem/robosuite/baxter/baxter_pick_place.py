@@ -595,6 +595,10 @@ class BaxterPickPlace(BaxterEnv):
         if self.has_gripper_right:
             dof += self.gripper_right.dof
         return dof
+    
+    def initialize_time(self, control_freq):
+        self.sim.model.vis.quality.offsamples = 8
+        super().initialize_time(control_freq)
 
 
 class BaxterPickPlaceSingle(BaxterPickPlace):
