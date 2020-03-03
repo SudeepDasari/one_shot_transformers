@@ -13,7 +13,7 @@ import numpy as np
 
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
-    def __init__(self, root_dir, height=224, width=224, normalize=True, T_context=15, T_pair=1, N_pair=1, mode='train', split=[0.9, 0.1]):
+    def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, T_context=15, T_pair=1, N_pair=1, mode='train', split=[0.9, 0.1]):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or N_pair > 0, "Must return (s,a) pairs or context!"
@@ -32,6 +32,7 @@ class AgentDemonstrations(Dataset):
 
         self._files = files
         self._im_dims = (width, height)
+        self._depth = depth
         self._normalize = normalize
         self._T_context = T_context
         self._T_pair = T_pair
@@ -45,7 +46,7 @@ class AgentDemonstrations(Dataset):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
 
-        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._im_dims[1], self._im_dims[0])
+        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._im_dims[1], self._im_dims[0], self._depth)
         return self._proc_traj(traj)
 
     def _proc_traj(self, traj):
@@ -82,11 +83,18 @@ class AgentDemonstrations(Dataset):
         clip = lambda x : int(max(0, min(x, len(traj) - 1)))
         per_bracket = len(traj) / self._T_context
         
-        frames = [resize(traj.get(0)['obs']['image'], self._im_dims, self._normalize)[None]]
+        def _make_frame(n):
+            obs = traj.get(n)['obs']
+            img = resize(obs['image'], self._im_dims, self._normalize)
+            if self._depth:
+                img = np.concatenate((img, resize(obs['depth'][:,:,None], self._im_dims, False)), -1)
+            return img[None]
+
+        frames = [_make_frame(0)]
         for i in range(1, self._T_context - 1):
             n = random.randint(clip(i * per_bracket), clip((i + 1) * per_bracket - 1))
-            frames.append(resize(traj.get(n)['obs']['image'], self._im_dims, self._normalize)[None])
-        frames.append(resize(traj.get(len(traj) - 1)['obs']['image'], self._im_dims, self._normalize)[None])
+            frames.append(_make_frame(n))
+        frames.append(_make_frame(len(traj) - 1))
         return np.transpose(np.concatenate(frames, 0), (0, 3, 1, 2))
 
     def _get_pair(self, traj):
@@ -96,6 +104,8 @@ class AgentDemonstrations(Dataset):
             t = traj.get(j + i)
             img = resize(t['obs']['image'], self._im_dims, self._normalize)
             pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=t['obs']['robot-state'])
+            if self._depth:
+                pair['s_{}'.format(j)]['depth'] = np.transpose(resize(t['obs']['depth'][:,:,None], self._im_dims, False), (2, 0, 1))
             if j:
                 pair['a_{}'.format(j)] = t['action'].astype(np.float32)
         return pair

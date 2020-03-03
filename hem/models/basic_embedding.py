@@ -81,13 +81,14 @@ class BasicEmbeddingModel(nn.Module):
 
 class ResNetFeats(nn.Module):
     def __init__(self, depth=False, out_dim=128):
+        super(ResNetFeats, self).__init__()
         resnet18 = models.resnet18(pretrained=True)
         self._features = nn.Sequential(*list(resnet18.children())[:-1])
 
         in_dim = 512
         self._depth = depth
         if depth:
-            self._conv_1 = nn.Conv2d(3, 32, 7, stride=2, padding=3)
+            self._conv_1 = nn.Conv2d(1, 32, 7, stride=2, padding=3)
             self._norm_1 = nn.BatchNorm2d(32)
             self._pool_1 = nn.MaxPool2d(4)
 
@@ -106,8 +107,10 @@ class ResNetFeats(nn.Module):
         self._out = nn.Linear(in_dim, out_dim)
         self._out_dim = out_dim
     
-    def forward(self, x, depth=None):
-        import pdb; pdb.set_trace()
+    def forward(self, x):
+        if self._depth:
+            x, depth = x
+
         reshaped = False
         if len(x.shape) == 5:
             reshaped = True
@@ -125,8 +128,9 @@ class ResNetFeats(nn.Module):
             depth = F.relu(self._norm_3_1(self._conv_3_1(depth)))
             depth = self._pool_3(self._norm_3_2(self._conv_3_2(depth)))
             depth = torch.squeeze(depth)
-            out = torch.cat((x, depth), -1)
-        
+            out = torch.cat((out, depth), -1)
+
+        out = self._out(out)
         if reshaped:
             out = out.reshape((B, T, self._out_dim))
         return out

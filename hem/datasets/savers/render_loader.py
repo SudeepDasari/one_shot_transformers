@@ -7,22 +7,28 @@ except:
 
 
 class ImageRenderWrapper:
-    def __init__(self, traj, height=None, width=None, no_render=False):
+    def __init__(self, traj, height=None, width=None, depth=False, no_render=False):
         self._height = height
         self._width = width
         self._sim = None
         self._traj = traj
+        self._depth = depth
         self._no_render = no_render
-    
+
     def get(self, t):
         ret = self._traj[t]
         if 'image' not in ret['obs'] and not self._no_render:
             sim = self._get_sim()
             sim.set_state_from_flattened(self._traj.get_raw_state(t))
             sim.forward()
-            ret['obs']['image'] = sim.render(camera_name='frontview', width=self._width, height=self._height, depth=False)[:,::-1]
+            if self._depth:
+                image, depth = sim.render(camera_name='frontview', width=self._width, height=self._height, depth=True)
+                ret['obs']['image'] = image[:,::-1]
+                ret['obs']['depth'] = depth[:,::-1]
+            else:
+                ret['obs']['image'] = sim.render(camera_name='frontview', width=self._width, height=self._height, depth=False)[:,::-1]
         return ret
-    
+
     def _get_sim(self):
         if self._sim is not None:
             return self._sim

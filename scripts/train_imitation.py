@@ -33,10 +33,12 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=1)
     
     # parser model
-    rnn_class = get_model(config['rnn'].pop('type'))
-    rnn = rnn_class(**config['rnn'])
+    embed = get_model(config['embedding'].pop('type'))
+    embed = embed(**config['embedding'])
+    rnn = get_model(config['rnn'].pop('type'))
+    rnn = rnn(**config['rnn'])
     mdn = MixtureDensityTop(**config['mdn'])
-    model = nn.Sequential(rnn, mdn)
+    model = nn.Sequential(embed, rnn, mdn)
     if torch.cuda.device_count() > 1 and args.device is None:
         model = nn.DataParallel(model)
     model.to(device)
@@ -53,9 +55,16 @@ if __name__ == '__main__':
     val_iter = iter(val_loader)
     for _ in range(config.get('epochs', 10)):
         for pairs, _ in train_loader:
-            optimizer.zero_grad()
             states, actions = batch_inputs(pairs, device)
-            mean, sigma_inv, alpha = model(states['images'][:,:-1])
+            images = states['images'][:,:-1]
+            if 'depth' in states:
+                depth = states['depth'][:,:-1]
+                inputs = [images, depth]
+            else:
+                inputs = images
+            
+            optimizer.zero_grad()
+            mean, sigma_inv, alpha = model(inputs)
             l_i = loss(actions, mean, sigma_inv, alpha)
             l_i.backward()
             optimizer.step()

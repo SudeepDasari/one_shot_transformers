@@ -5,4 +5,7 @@ def get_model(name):
     elif name == 'base rnn':
         from .basic_rnn import BaseRNN
         return BaseRNN
+    elif name == 'resnet':
+        from .basic_embedding import ResNetFeats
+        return ResNetFeats
     raise NotImplementedError

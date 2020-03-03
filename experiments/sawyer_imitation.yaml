@@ -5,20 +5,21 @@ loader_workers: 8
 
 dataset:
   type: "agent"
-  root_dir: ${ROBOT_DIR}/sawyer
+  root_dir: ${ROBOT_DIR}/sawyer_can
   height: 224
   width: 224
+  depth: True
   T_context: 0
   T_pair: 20
 
-embed:
-  type: ''
-  
+embedding:
+  type: 'resnet'
+  depth: True
+
 rnn:
   type: "base rnn"
-  in_dim: 512
+  in_dim: 128
   out_dim: 64
-  visual_input: True
 
 mdn:
   in_dim: 64
