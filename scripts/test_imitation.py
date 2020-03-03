@@ -66,8 +66,8 @@ if __name__ == '__main__':
     mdn = MixtureDensityTop(**config['mdn'])
     model = nn.Sequential(base_model, mdn)
     model.load_state_dict(clean_dict(torch.load(args.model_weights, map_location=device)))
+    model = model.eval()
     model.to(device)
-    model.eval()
     
     height = config['dataset'].get('height', 224)
     width = config['dataset'].get('height', 224)

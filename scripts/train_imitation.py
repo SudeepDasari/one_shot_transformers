@@ -33,10 +33,10 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=1)
     
     # parser model
-    model_class = get_model(config['model'].pop('type'))
-    base_model = model_class(**config['model'])
+    rnn_class = get_model(config['rnn'].pop('type'))
+    rnn = rnn_class(**config['rnn'])
     mdn = MixtureDensityTop(**config['mdn'])
-    model = nn.Sequential(base_model, mdn)
+    model = nn.Sequential(rnn, mdn)
     if torch.cuda.device_count() > 1 and args.device is None:
         model = nn.DataParallel(model)
     model.to(device)
@@ -86,4 +86,4 @@ if __name__ == '__main__':
             step += 1
 
             if step % config.get('save_freq', 5000) == 0:
-                torch.save(model.state_dict(), save_path + '-{}'.format(step))
+                torch.save(model, save_path + '-{}.pt'.format(step))

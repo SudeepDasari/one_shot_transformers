@@ -77,3 +77,56 @@ class BasicEmbeddingModel(nn.Module):
         embed = embed.reshape((B, T, 128))
 
         return embed
+
+
+class ResNetFeats(nn.Module):
+    def __init__(self, depth=False, out_dim=128):
+        resnet18 = models.resnet18(pretrained=True)
+        self._features = nn.Sequential(*list(resnet18.children())[:-1])
+
+        in_dim = 512
+        self._depth = depth
+        if depth:
+            self._conv_1 = nn.Conv2d(3, 32, 7, stride=2, padding=3)
+            self._norm_1 = nn.BatchNorm2d(32)
+            self._pool_1 = nn.MaxPool2d(4)
+
+            self._conv_2_1 = nn.Conv2d(32, 64, 3, padding=1)
+            self._norm_2_1 = nn.BatchNorm2d(64)
+            self._conv_2_2 = nn.Conv2d(64, 64, 3, padding=1)
+            self._norm_2_2 = nn.BatchNorm2d(64)
+            self._pool_2 = nn.MaxPool2d(4)
+
+            self._conv_3_1 = nn.Conv2d(64, 128, 3, padding=1)
+            self._norm_3_1 = nn.BatchNorm2d(128)
+            self._conv_3_2 = nn.Conv2d(128, 128, 3, padding=1)
+            self._norm_3_2 = nn.BatchNorm2d(128)
+            self._pool_3 = nn.AdaptiveAvgPool2d(1)
+            in_dim += 128
+        self._out = nn.Linear(in_dim, out_dim)
+        self._out_dim = out_dim
+    
+    def forward(self, x, depth=None):
+        import pdb; pdb.set_trace()
+        reshaped = False
+        if len(x.shape) == 5:
+            reshaped = True
+            B, T, C, H, W = x.shape
+            x = x.reshape((B * T, C, H, W))
+
+            if self._depth:
+                depth = depth.reshape((B * T, 1, H, W))
+
+        out = torch.squeeze(self._features(x))
+        if self._depth:
+            depth = self._pool_1(F.relu(self._norm_1(self._conv_1(depth))))
+            depth = F.relu(self._norm_2_1(self._conv_2_1(depth)))
+            depth = self._pool_2(self._norm_2_2(self._conv_2_2(depth)))
+            depth = F.relu(self._norm_3_1(self._conv_3_1(depth)))
+            depth = self._pool_3(self._norm_3_2(self._conv_3_2(depth)))
+            depth = torch.squeeze(depth)
+            out = torch.cat((x, depth), -1)
+        
+        if reshaped:
+            out = out.reshape((B, T, self._out_dim))
+        return out
