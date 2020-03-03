@@ -38,6 +38,8 @@ class SawyerPickPlace(DefaultSawyerPickPlace):
             self._bin_mappings = np.arange(len(self.object_to_id.keys()))
             if self._randomize_goal:
                 np.random.shuffle(self._bin_mappings)
+            else:
+                self._bin_mappings[:] = 3
         super()._reset_internal()
     
     def reward(self, action=None):

@@ -280,6 +280,8 @@ class BaxterPickPlace(BaxterEnv):
             self._bin_mappings = np.arange(len(self.object_to_id.keys()))
             if self._randomize_goal:
                 np.random.shuffle(self._bin_mappings)
+            else:
+                self._bin_mappings[:] = 3
         super()._reset_internal()
 
         # reset positions of objects, and move objects out of the scene depending on the mode
