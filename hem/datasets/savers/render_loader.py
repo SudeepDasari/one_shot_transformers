@@ -28,11 +28,11 @@ class ImageRenderWrapper:
             return self._sim
 
         xml = postprocess_model_xml(self._traj.config_str)
-        if 'sawyer' in xml and 'can' in xml:
-            from hem.datasets.precompiled_models.sawyer_can import models
+        if 'sawyer' in xml:
+            from hem.datasets.precompiled_models.sawyer import models
             self._sim = models[0]
-        elif 'baxter' in xml and 'can' in xml:
-            from hem.datasets.precompiled_models.baxter_can import models
+        elif 'baxter' in xml:
+            from hem.datasets.precompiled_models.baxter import models
             self._sim = models[0]
         else:
             model = load_model_from_xml(xml)
