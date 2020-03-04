@@ -83,7 +83,13 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     states, actions = batch_inputs(val_pairs, device)
-                    mean, sigma_inv, alpha = model(states['images'][:,:-1])
+                    images = states['images'][:,:-1]
+                    if 'depth' in states:
+                        depth = states['depth'][:,:-1]
+                        inputs = [images, depth]
+                    else:
+                        inputs = images
+                    mean, sigma_inv, alpha = model(inputs)
                     val_l = loss(actions, mean, sigma_inv, alpha)
 
                 writer.add_scalar('loss/val', val_l.item(), step)
