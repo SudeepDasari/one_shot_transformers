@@ -67,7 +67,6 @@ if __name__ == '__main__':
 
             if config.get('output_state', True):
                 actions = torch.cat((states['states'][:,1:], actions[:,:,-1][:,:,None]), 2)
-                import pdb; pdb.set_trace()
             
             optimizer.zero_grad()
             mean, sigma_inv, alpha = model(inputs)
