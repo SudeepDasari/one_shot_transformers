@@ -15,31 +15,32 @@ import imageio
 from tqdm import tqdm
 
 
-def rollout_bc(policy, env_type, device, N=10, height=224, widht=224, horizon=20):
-    trajs = []
-    for _ in range(N):
-        np.random.seed()
-        env = get_env(env_type)(has_renderer=False, reward_shaping=False, use_camera_obs=True)
-        obs = env.reset()
+def rollout_bc(policy, env_type, device, height=224, widht=224, horizon=20, depth=False):
+    np.random.seed()
+    env = get_env(env_type)(has_renderer=False, reward_shaping=False, use_camera_obs=True, camera_depth=depth, camera_height=height, camera_width=width)
+    obs = env.reset()
+    
+    traj = Trajectory()
+    traj.append(obs)
+    past_obs = []
+    for _ in tqdm(range(env.horizon)):
+        past_obs.append([np.transpose(resize(obs['image'], (width, height), True), (2, 0, 1))[None]])
+        if depth:
+            past_obs[-1].append(np.transpose(resize(obs['depth'][:,:,None], (width, height), False), (2, 0, 1))[None])
+        if len(past_obs) > horizon:
+            past_obs = past_obs[1:]
         
-        traj = Trajectory()
-        traj.append(obs)
-        past_obs = []
-        for _ in tqdm(range(env.horizon)):
-            past_obs.append(np.transpose(resize(obs['image'], (width, height), True), (2, 0, 1))[None])
-            if len(past_obs) > horizon:
-                past_obs = past_obs[1:]
-            
-            policy_in = torch.from_numpy(np.concatenate(past_obs, 0)[None]).to(device)
-            with torch.no_grad():
-                action = policy(policy_in)[0]
-            
-            obs, reward, done, info = env.step(action)
-            traj.append(obs, reward, done, info, action)
-            if reward or done:
-                break
-        trajs.append(traj)
-    return trajs
+        policy_in = torch.from_numpy(np.concatenate([p[0] for p in past_obs], 0)[None]).to(device)
+        if depth:
+            policy_in = [policy_in, torch.from_numpy(np.concatenate([p[1] for p in past_obs], 0)[None]).to(device)]
+        with torch.no_grad():
+            action = policy(policy_in, n_samples=1)[0]
+        
+        obs, reward, done, info = env.step(action)
+        traj.append(obs, reward, done, info, action)
+        if reward or done:
+            break
+    return traj
 
 
 def _to_uint(torch_img, new_size=96):
@@ -53,28 +54,25 @@ def _to_uint(torch_img, new_size=96):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('model_config', type=str)
-    parser.add_argument('model_weights', type=str)
+    parser.add_argument('model_path', type=str)
+    parser.add_argument('config', type=str)
     parser.add_argument('--env', type=str, default='SawyerPickPlaceCan')
     parser.add_argument('--N', type=int, default=10)
     args = parser.parse_args()
-    config = parse_basic_config(args.model_config)
+    config = parse_basic_config(args.config)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model_class = get_model(config['model'].pop('type'))
-    base_model = model_class(**config['model'])
-    mdn = MixtureDensityTop(**config['mdn'])
-    model = nn.Sequential(base_model, mdn)
-    model.load_state_dict(clean_dict(torch.load(args.model_weights, map_location=device)))
+    model = torch.load(args.model_path, map_location=device)
     model = model.eval()
     model.to(device)
+    policy = MixtureDensitySampler(model)
     
     height = config['dataset'].get('height', 224)
     width = config['dataset'].get('height', 224)
     T = config['dataset'].get('T_pair', 20)
-    rollouts = rollout_bc(MixtureDensitySampler(model), args.env, device, args.N, height, width, T)
-
-    for i, traj in enumerate(rollouts):
+    depth = config['embedding'].get('depth', False)
+    for i in range(args.N):
+        traj = rollout_bc(policy, args.env, device, height, width, T, depth)
         out = imageio.get_writer('out{}.gif'.format(i))
         for t in traj:
             out.append_data(t['obs']['image'])

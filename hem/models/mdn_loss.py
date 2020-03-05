@@ -60,5 +60,5 @@ class MixtureDensitySampler:
             actions.append(ac[None])
         return np.concatenate(actions, 0)
     
-    def __call__(self, inputs):
-        return self.forward(inputs)
+    def __call__(self, inputs, n_samples=1):
+        return self.forward(inputs, n_samples)
