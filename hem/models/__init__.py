@@ -1,3 +1,6 @@
+from hem.models.trainer import Trainer
+
+
 def get_model(name):
     if name == 'base':
         from .basic_embedding import BasicEmbeddingModel

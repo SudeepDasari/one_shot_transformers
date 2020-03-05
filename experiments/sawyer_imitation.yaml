@@ -1,7 +1,7 @@
 batch_size: 16
 lr: 0.001
 epochs: 400
-loader_workers: 8
+loader_workers: 0
 
 dataset:
   type: "agent"
@@ -13,15 +13,19 @@ dataset:
   T_pair: 40
   freq: 4
 
+auxillary:
+  in_dim: 64
+  out_dim: 7
+
 embedding:
   type: 'resnet'
   depth: True
 
-rnn:
+action_model:
   type: "base rnn"
-  in_dim: 128
-  out_dim: 64
+  in_dim: 64
+  out_dim: 32
 
 mdn:
-  in_dim: 64
+  in_dim: 32
   out_dim: 8

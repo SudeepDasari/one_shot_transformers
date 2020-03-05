@@ -35,9 +35,12 @@ def rollout_bc(policy, env_type, device, height=224, widht=224, horizon=20, dept
             policy_in = [policy_in, torch.from_numpy(np.concatenate([p[1] for p in past_obs], 0)[None]).to(device)]
         with torch.no_grad():
             action = policy(policy_in, n_samples=1)[0]
-        
-        obs, reward, done, info = env.step(action)
-        traj.append(obs, reward, done, info, action)
+
+        for _ in range(8):
+            p = -0.4 * (obs['joint_pos'] - action[:7])
+            a = np.concatenate((p, [action[-1]]))
+            obs, reward, done, info = env.step(a)
+            traj.append(obs, reward, done, info, a)
         if reward or done:
             break
     return traj
