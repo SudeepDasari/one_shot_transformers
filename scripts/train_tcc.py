@@ -15,11 +15,13 @@ if __name__ == '__main__':
     now = datetime.datetime.now()
     parser = argparse.ArgumentParser(description="test")
     parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
+    parser.add_argument('--device', type=int, default=None, nargs='+', help='target device (uses all if not specified)')
     args = parser.parse_args()
     config = parse_basic_config(args.experiment_file)
     
     # initialize device
-    device = torch.device("cuda:0")
+    def_device = 0 if args.device is None else args.device[0]
+    device = torch.device("cuda:{}".format(def_device))
 
     # parse dataset
     dataset_class = get_dataset(config['dataset'].pop('type'))
@@ -31,8 +33,10 @@ if __name__ == '__main__':
     # parser model
     model_class = get_model(config['model'].pop('type'))
     model = model_class(**config['model'])
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 and args.device is None:
         model = nn.DataParallel(model)
+    elif args.device is not None and len(args.device) > 1:
+        model = nn.DataParallel(model, device_ids=args.device)
     model.to(device)
 
     # optimizer
