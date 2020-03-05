@@ -17,12 +17,12 @@ if __name__ == '__main__':
     now = datetime.datetime.now()
     parser = argparse.ArgumentParser(description="test")
     parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
-    parser.add_argument('--device', type=int, default=None, help='target device (uses all if not specified)')
+    parser.add_argument('--device', type=int, default=None, nargs='+', help='target device (uses all if not specified)')
     args = parser.parse_args()
     config = parse_basic_config(args.experiment_file)
     
     # initialize device
-    def_device = 0 if args.device is None else args.device
+    def_device = 0 if args.device is None else args.device[0]
     device = torch.device("cuda:{}".format(def_device))
 
     # parse dataset
@@ -41,6 +41,8 @@ if __name__ == '__main__':
     model = nn.Sequential(embed, rnn, mdn)
     if torch.cuda.device_count() > 1 and args.device is None:
         model = nn.DataParallel(model)
+    elif args.device is not None and len(args.device) > 1:
+        model = nn.DataParallel(model, device_ids=args.device)
     model.to(device)
 
     # optimizer
@@ -62,6 +64,10 @@ if __name__ == '__main__':
                 inputs = [images, depth]
             else:
                 inputs = images
+
+            if config.get('output_state', True):
+                actions = torch.cat((states['states'][:,1:], actions[:,:,-1][:,:,None]), 2)
+                import pdb; pdb.set_trace()
             
             optimizer.zero_grad()
             mean, sigma_inv, alpha = model(inputs)

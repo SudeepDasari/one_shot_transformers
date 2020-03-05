@@ -10,7 +10,8 @@ dataset:
   width: 224
   depth: True
   T_context: 0
-  T_pair: 20
+  T_pair: 40
+  freq: 4
 
 embedding:
   type: 'resnet'

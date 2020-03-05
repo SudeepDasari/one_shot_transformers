@@ -13,7 +13,7 @@ import numpy as np
 
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
-    def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, T_context=15, T_pair=1, N_pair=1, mode='train', split=[0.9, 0.1]):
+    def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, T_context=15, T_pair=1, N_pair=1, freq=1, mode='train', split=[0.9, 0.1]):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or N_pair > 0, "Must return (s,a) pairs or context!"
@@ -37,6 +37,7 @@ class AgentDemonstrations(Dataset):
         self._T_context = T_context
         self._T_pair = T_pair
         self._N_pair = N_pair
+        self._freq = freq
 
     def __len__(self):
         return len(self._files)
@@ -99,11 +100,11 @@ class AgentDemonstrations(Dataset):
 
     def _get_pair(self, traj):
         pair = {}
-        i = random.randint(0, len(traj) - self._T_pair - 1)
+        i = random.randint(0, len(traj) - self._T_pair * self._freq - 1)
         for j in range(self._T_pair + 1):
-            t = traj.get(j + i)
+            t = traj.get(j * self._freq + i)
             img = resize(t['obs']['image'], self._im_dims, self._normalize)
-            pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=t['obs']['robot-state'])
+            pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=t['obs']['joint_pos'].astype(np.float32))
             if self._depth:
                 pair['s_{}'.format(j)]['depth'] = np.transpose(resize(t['obs']['depth'][:,:,None], self._im_dims, False), (2, 0, 1))
             if j:
