@@ -4,9 +4,8 @@ import random
 
 
 class TeacherDemonstrations(AgentDemonstrations):
-    def __init__(self, N_pair=0, **kwargs):
-        assert N_pair == 0, "Cannot return (s,a) pairs!"
-        super().__init__(N_pair=N_pair, **kwargs)
+    def __init__(self, teacher_dir,  **kwargs):
+        super().__init__(teacher_dir, **kwargs)
 
     def _proc_traj(self, traj):
         return self._make_context(traj)
