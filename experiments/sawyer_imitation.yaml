@@ -1,7 +1,7 @@
 batch_size: 16
 lr: 0.001
 epochs: 400
-loader_workers: 0
+loader_workers: 8
 
 dataset:
   type: "agent"
@@ -10,7 +10,7 @@ dataset:
   width: 224
   depth: True
   T_context: 0
-  T_pair: 40
+  T_pair: 20
   freq: 4
 
 auxillary:
