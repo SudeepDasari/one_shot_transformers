@@ -20,8 +20,9 @@ class ImitationModule(nn.Module):
         self._mdn = MixtureDensityTop(**config['mdn'])
 
         self._aux = False
-        if 'auxillary' in config:
-            self._aux_linear = nn.Linear(config['auxillary']['in_dim'], config['auxillary']['out_dim'])
+        if 'auxiliary' in config:
+            self._aux = True
+            self._aux_linear = nn.Linear(config['auxiliary']['in_dim'], config['auxiliary']['out_dim'])
     
     def forward(self, images, depth=None):
         vis_embed = self._embed(images, depth)

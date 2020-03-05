@@ -13,7 +13,7 @@ dataset:
   T_pair: 20
   freq: 4
 
-auxillary:
+auxiliary:
   in_dim: 64
   out_dim: 7
 
