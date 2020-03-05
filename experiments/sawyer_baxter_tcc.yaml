@@ -7,6 +7,8 @@ dataset:
   type: "agent teacher"
   agent_dir: ${ROBOT_DIR}/sawyer_can
   teacher_dir: ${ROBOT_DIR}/baxter_can
+  N_pair: 0
+
 
 model:
   type: base

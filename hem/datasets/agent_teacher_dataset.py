@@ -21,5 +21,5 @@ class AgentTeacherDataset(Dataset):
         t_idx = int(index // len(self._agent_dataset))
 
         agent_pairs, agent_context = self._agent_dataset[a_idx]
-        _, teacher_context = self._teacher_dataset[t_idx]
+        teacher_context = self._teacher_dataset[t_idx]
         return teacher_context, agent_context, agent_pairs
