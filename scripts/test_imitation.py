@@ -13,6 +13,7 @@ from hem.datasets import Trajectory
 from hem.robosuite import get_env
 import imageio
 from tqdm import tqdm
+from train_imitation import ImitationModule
 
 
 def rollout_bc(policy, env_type, device, height=224, widht=224, horizon=20, depth=False):
@@ -34,7 +35,7 @@ def rollout_bc(policy, env_type, device, height=224, widht=224, horizon=20, dept
         if depth:
             policy_in = [policy_in, torch.from_numpy(np.concatenate([p[1] for p in past_obs], 0)[None]).to(device)]
         with torch.no_grad():
-            action = policy(policy_in, n_samples=1)[0]
+            action = policy(policy_in, n_samples=5)[0]
 
         for _ in range(8):
             p = -0.4 * (obs['joint_pos'] - action[:7])

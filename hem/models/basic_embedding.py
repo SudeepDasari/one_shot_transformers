@@ -118,14 +118,14 @@ class ResNetFeats(nn.Module):
             if self._depth:
                 depth = depth.reshape((B * T, 1, H, W))
 
-        out = torch.squeeze(self._features(x))
+        out = self._features(x)[:,:,0,0]
         if self._depth:
             depth = self._pool_1(F.relu(self._norm_1(self._conv_1(depth))))
             depth = F.relu(self._norm_2_1(self._conv_2_1(depth)))
             depth = self._pool_2(self._norm_2_2(self._conv_2_2(depth)))
             depth = F.relu(self._norm_3_1(self._conv_3_1(depth)))
             depth = self._pool_3(self._norm_3_2(self._conv_3_2(depth)))
-            depth = torch.squeeze(depth)
+            depth = depth[:,:,0,0]
             out = torch.cat((out, depth), -1)
 
         out = F.relu(self._out_norm(self._out(out)))

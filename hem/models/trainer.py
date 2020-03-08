@@ -102,4 +102,7 @@ class Trainer:
                 step += 1
 
                 if step % save_freq == 0:
-                    torch.save(model, self._save_fname + '-{}.pt'.format(step))
+                    save_module = model
+                    if isinstance(model, nn.DataParallel):
+                        save_module = model.module
+                    torch.save(save_module, self._save_fname + '-{}.pt'.format(step))

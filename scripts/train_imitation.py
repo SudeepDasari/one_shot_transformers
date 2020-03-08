@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
         stats = dict(mdn=l_mdn.item())
         if pred_state is not None:
-            state_loss = config['auxiliary'].get('weight', 0.1) * torch.mean(torch.sum((pred_state - states['joints'][:,:-1]) ** 2, (1, 2)))
+            state_loss = torch.mean(torch.sum((pred_state - states['joints'][:,:-1]) ** 2, (1, 2)))
             stats['aux_loss'] = state_loss.item()
-        return l_mdn + state_loss, stats
+        return l_mdn + config['auxiliary'].get('weight', 0.5) * state_loss, stats
     trainer.train(model, forward)
