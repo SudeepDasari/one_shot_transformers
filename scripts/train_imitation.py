@@ -26,10 +26,12 @@ class ImitationModule(nn.Module):
     
     def forward(self, images, depth=None):
         vis_embed = self._embed(images, depth)
-        mean, sigma_inv, alpha = self._mdn(self._action_model(vis_embed))
-
         if self._aux:
-            return mean, sigma_inv, alpha, self._aux_linear(vis_embed)
+            aux_pred = self._aux_linear(vis_embed)
+            state_embed = torch.cat((vis_embed, aux_pred), -1)
+            mean, sigma_inv, alpha = self._mdn(self._action_model(state_embed))
+            return mean, sigma_inv, alpha, aux_pred 
+        mean, sigma_inv, alpha = self._mdn(self._action_model(vis_embed))
         return mean, sigma_inv, alpha, None
 
 

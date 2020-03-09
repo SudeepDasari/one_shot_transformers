@@ -11,4 +11,7 @@ def get_model(name):
     elif name == 'resnet':
         from .basic_embedding import ResNetFeats
         return ResNetFeats
+    elif name == 'vgg':
+        from .basic_embedding import VGGFeats
+        return VGGFeats
     raise NotImplementedError

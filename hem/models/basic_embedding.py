@@ -132,3 +132,62 @@ class ResNetFeats(nn.Module):
         if reshaped:
             out = out.reshape((B, T, self._out_dim))
         return out
+
+
+class CoordConv(nn.Module):
+    def __init__(self, in_dim, out_dim, kernel_size, padding=1, stride=1):
+        super().__init__()
+        self._conv = nn.Conv2d(in_dim + 2, out_dim, kernel_size, stride, padding)
+    
+    def forward(self, x):
+        B, C, H, W = x.shape
+        h_pad = torch.linspace(-1, 1, H).reshape((1, 1, H, 1)).repeat((B, 1, 1, W))
+        w_pad = torch.linspace(-1, 1, W).reshape((1, 1, 1, W)).repeat((B, 1, H, 1))
+        x = torch.cat((x, h_pad.to(x.device), w_pad.to(x.device)), 1)
+        return self._conv(x)
+
+
+class VGGFeats(nn.Module):
+    def __init__(self, out_dim=64, depth=False):
+        assert not depth, "Depth not implemented yet!"
+        super().__init__()
+
+        vgg_feats = models.vgg16(pretrained=True).features
+        vgg_feats = list(vgg_feats.children())[:9]
+
+        cc1 = CoordConv(128, 128, 3)
+        n1 = nn.BatchNorm2d(128)
+        a1 = nn.ReLU(inplace=True)
+        p1 = nn.MaxPool2d(2)
+
+        cc2_1 = CoordConv(128, 256, 3)
+        n2_1 = nn.BatchNorm2d(256)
+        a2_1 = nn.ReLU(inplace=True)
+        cc2_2 = CoordConv(256, 256, 3)
+        n2_2 = nn.BatchNorm2d(256)
+        a2_2 = nn.ReLU(inplace=True)
+        p2 = nn.AdaptiveAvgPool2d(1)
+
+        all_feats = vgg_feats + [cc1, n1, a1, p1, cc2_1, n2_1, a2_1, cc2_2, n2_2, a2_2, p2]
+        self._visual_feats = nn.Sequential(*all_feats)
+
+        self._out_dim = out_dim
+        self._linear = nn.Linear(256, out_dim)
+        self._linear_norm = nn.BatchNorm1d(out_dim)
+
+    def forward(self, x, depth=None):
+        if len(x.shape) == 5:
+            has_time = True
+            B, T, C, H, W = x.shape
+            x = x.reshape((B * T, C, H, W))
+        else:
+            has_time = False
+            B, C, H, W = x.shape
+        
+        visual_feats = self._visual_feats(x)
+        visual_feats = visual_feats.reshape((visual_feats.shape[0], 256))
+        visual_feats = F.relu(self._linear_norm(self._linear(visual_feats)))
+
+        if has_time:
+            return visual_feats.reshape((B, T, self._out_dim))
+        return visual_feats

@@ -8,7 +8,7 @@ dataset:
   root_dir: ${ROBOT_DIR}/sawyer_can
   height: 224
   width: 224
-  depth: True
+  depth: False
   T_context: 0
   T_pair: 20
   freq: 4
@@ -18,8 +18,8 @@ auxiliary:
   out_dim: 7
 
 embedding:
-  type: 'resnet'
-  depth: True
+  type: 'vgg'
+  depth: False
 
 action_model:
   type: "base rnn"
