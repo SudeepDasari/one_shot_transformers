@@ -32,5 +32,5 @@ class BaseRNN(nn.Module):
                 x = x.reshape((B, L, self._in_dim))
             else:
                 x = x.reshape((L, B, self._in_dim))
-
+        self._gru.flatten_parameters()
         return self._gru(x)[0]
