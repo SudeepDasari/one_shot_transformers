@@ -149,12 +149,15 @@ class CoordConv(nn.Module):
 
 class VGGFeats(nn.Module):
     def __init__(self, out_dim=64, depth=False):
-        assert not depth, "Depth not implemented yet!"
         super().__init__()
-
         vgg_feats = models.vgg16(pretrained=True).features
         vgg_feats = list(vgg_feats.children())[:4]
-        cc0 = CoordConv(64, 64, 3, stride=2)
+        
+        c0_in, self._has_depth = 64, False
+        if depth:
+            self._has_depth = True
+            c0_in += 1
+        cc0 = CoordConv(c0_in, 64, 3, stride=2)
         n0 = nn.BatchNorm2d(64)
         a0 = nn.ReLU(inplace=True)
 
@@ -171,25 +174,35 @@ class VGGFeats(nn.Module):
         a2_2 = nn.ReLU(inplace=True)
         p2 = nn.AdaptiveAvgPool2d(1)
 
-        all_feats = vgg_feats + [cc0, n0, a0, cc1, n1, a1, p1, cc2_1, n2_1, a2_1, cc2_2, n2_2, a2_2, p2]
-        self._visual_feats = nn.Sequential(*all_feats)
+        self._vgg = nn.Sequential(*vgg_feats)
+        self._v1 = nn.Sequential(*[cc0, n0, a0])
+        self._v2 = nn.Sequential(*[cc1, n1, a1, p1, cc2_1, n2_1, a2_1, cc2_2, n2_2, a2_2, p2])
 
         self._out_dim = out_dim
-        self._linear = nn.Linear(256, out_dim)
-        self._linear_norm = nn.BatchNorm1d(out_dim)
+        linear = nn.Linear(256, out_dim)
+        linear_norm = nn.BatchNorm1d(out_dim)
+        linear_ac = nn.ReLU(inplace=True)
+        self._linear = nn.Sequential(linear, linear_norm, linear_ac)
 
     def forward(self, x, depth=None):
         if len(x.shape) == 5:
             has_time = True
             B, T, C, H, W = x.shape
             x = x.reshape((B * T, C, H, W))
+            if self._has_depth:
+                depth = depth.reshape((B * T, C, H, W))
         else:
             has_time = False
             B, C, H, W = x.shape
         
-        visual_feats = self._visual_feats(x)
+        if self._has_depth:
+            visual_feats = self._vgg(x)
+            visual_feats = torch.cat((visual_feats, depth), 1)
+            visual_feats = self._v2(self._v1(visual_feats))
+        else:
+            visual_feats = self._v2(self._v1(self._vgg(x)))
         visual_feats = visual_feats.reshape((visual_feats.shape[0], 256))
-        visual_feats = F.relu(self._linear_norm(self._linear(visual_feats)))
+        visual_feats = self._linear(visual_feats)
 
         if has_time:
             return visual_feats.reshape((B, T, self._out_dim))

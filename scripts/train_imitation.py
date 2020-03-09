@@ -22,13 +22,17 @@ class ImitationModule(nn.Module):
         self._aux = False
         if 'auxiliary' in config:
             self._aux = True
-            self._aux_linear = nn.Linear(config['auxiliary']['in_dim'], config['auxiliary']['out_dim'])
+            hidden = config['auxiliary'].get('hidden_dim', 16)
+            l1 = nn.Linear(config['auxiliary']['in_dim'], hidden)
+            a1 = nn.ReLU(inplace=True)
+            l2 = nn.Linear(hidden, config['auxiliary']['out_dim'])
+            self._aux_linear = nn.Sequential(l1, a1, l2)
     
     def forward(self, images, depth=None):
         vis_embed = self._embed(images, depth)
         if self._aux:
             aux_pred = self._aux_linear(vis_embed)
-            state_embed = torch.cat((vis_embed, aux_pred), -1)
+            state_embed = torch.cat((vis_embed, aux_pred.detach()), -1)
             mean, sigma_inv, alpha = self._mdn(self._action_model(state_embed))
             return mean, sigma_inv, alpha, aux_pred 
         mean, sigma_inv, alpha = self._mdn(self._action_model(vis_embed))

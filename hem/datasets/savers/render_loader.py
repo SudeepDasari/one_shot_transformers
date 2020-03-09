@@ -24,19 +24,26 @@ class ImageRenderWrapper:
             if self._depth:
                 image, depth = sim.render(camera_name='frontview', width=self._width, height=self._height, depth=True)
                 ret['obs']['image'] = image[:,::-1]
-                ret['obs']['depth'] = depth[:,::-1]
+                ret['obs']['depth'] = self._proc_depth(depth[:,::-1])
             else:
                 ret['obs']['image'] = sim.render(camera_name='frontview', width=self._width, height=self._height, depth=False)[:,::-1]
         return ret
 
+    def _proc_depth(self, depth):
+        if self._depth_norm == 'sawyer':
+            return (depth - 0.992) / 0.0072
+        return depth
+    
     def _get_sim(self):
         if self._sim is not None:
             return self._sim
 
         xml = postprocess_model_xml(self._traj.config_str)
+        self._depth_norm = None
         if 'sawyer' in xml:
             from hem.datasets.precompiled_models.sawyer import models
             self._sim = models[0]
+            self._depth_norm = 'sawyer'
         elif 'baxter' in xml:
             from hem.datasets.precompiled_models.baxter import models
             self._sim = models[0]
@@ -57,3 +64,7 @@ class ImageRenderWrapper:
 
     def __len__(self):
         return len(self._traj)
+    
+    def __iter__(self):
+        for d in range(len(self._traj)):
+            yield self.get(d)
