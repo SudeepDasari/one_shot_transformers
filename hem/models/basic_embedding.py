@@ -153,7 +153,10 @@ class VGGFeats(nn.Module):
         super().__init__()
 
         vgg_feats = models.vgg16(pretrained=True).features
-        vgg_feats = list(vgg_feats.children())[:5]
+        vgg_feats = list(vgg_feats.children())[:4]
+        cc0 = CoordConv(64, 64, 3, stride=2)
+        n0 = nn.BatchNorm2d(64)
+        a0 = nn.ReLU(inplace=True)
 
         cc1 = CoordConv(64, 128, 3, stride=2)
         n1 = nn.BatchNorm2d(128)
@@ -168,7 +171,7 @@ class VGGFeats(nn.Module):
         a2_2 = nn.ReLU(inplace=True)
         p2 = nn.AdaptiveAvgPool2d(1)
 
-        all_feats = vgg_feats + [cc1, n1, a1, p1, cc2_1, n2_1, a2_1, cc2_2, n2_2, a2_2, p2]
+        all_feats = vgg_feats + [cc0, n0, a0, cc1, n1, a1, p1, cc2_1, n2_1, a2_1, cc2_2, n2_2, a2_2, p2]
         self._visual_feats = nn.Sequential(*all_feats)
 
         self._out_dim = out_dim

@@ -31,9 +31,9 @@ def rollout_bc(policy, env_type, device, height=224, widht=224, horizon=20, dept
         if len(past_obs) > horizon:
             past_obs = past_obs[1:]
         
-        policy_in = torch.from_numpy(np.concatenate([p[0] for p in past_obs], 0)[None]).to(device)
+        policy_in = [torch.from_numpy(np.concatenate([p[0] for p in past_obs], 0)[None]).to(device)]
         if depth:
-            policy_in = [policy_in, torch.from_numpy(np.concatenate([p[1] for p in past_obs], 0)[None]).to(device)]
+            policy_in = policy_in.append(torch.from_numpy(np.concatenate([p[1] for p in past_obs], 0)[None]).to(device))
         with torch.no_grad():
             action = policy(policy_in, n_samples=5)[0]
 
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     depth = config['embedding'].get('depth', False)
     for i in range(args.N):
         traj = rollout_bc(policy, args.env, device, height, width, T, depth)
-        out = imageio.get_writer('out{}.gif'.format(i))
+        out = imageio.get_writer('out{}.gif'.format(i), fps=30)
         for t in traj:
             out.append_data(t['obs']['image'])
         out.close()
