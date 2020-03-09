@@ -155,7 +155,7 @@ class VGGFeats(nn.Module):
         vgg_feats = models.vgg16(pretrained=True).features
         vgg_feats = list(vgg_feats.children())[:5]
 
-        cc1 = CoordConv(128, 128, 3, stride=2)
+        cc1 = CoordConv(64, 128, 3, stride=2)
         n1 = nn.BatchNorm2d(128)
         a1 = nn.ReLU(inplace=True)
         p1 = nn.MaxPool2d(2)
