@@ -190,7 +190,7 @@ class VGGFeats(nn.Module):
             B, T, C, H, W = x.shape
             x = x.reshape((B * T, C, H, W))
             if self._has_depth:
-                depth = depth.reshape((B * T, C, H, W))
+                depth = depth.reshape((B * T, 1, H, W))
         else:
             has_time = False
             B, C, H, W = x.shape
