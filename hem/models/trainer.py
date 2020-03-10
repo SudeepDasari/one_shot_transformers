@@ -54,8 +54,16 @@ class Trainer:
             model = nn.DataParallel(model, device_ids=self._device_list )
         model = model.to(self._device)
         
-        # initializer optimizer
+        # initializer optimizer and lr scheduler
         optimizer = torch.optim.Adam(model.parameters(), self._config['lr'])
+        vlm_alpha = self._config.get('vlm_alpha', 0.6)
+        lr_schedule = self._config.get('lr_schedule', 'ReduceLROnPlateau')
+        if lr_schedule == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+        elif lr_schedule is None:
+            scheduler = None
+        else:
+            raise NotImplementedError
 
         # initialize constants:
         epochs = self._config.get('epochs', 1)
@@ -65,7 +73,8 @@ class Trainer:
         step = 0
         train_stats = {'loss': 0}
         val_iter = iter(self._val_loader)
-        for _ in range(epochs):
+        vl_running_mean = None
+        for e in range(epochs):
             for inputs in self._train_loader:
                 optimizer.zero_grad()
                 loss_i, stats_i = forward_fn(model, self._device, *inputs)
@@ -90,13 +99,18 @@ class Trainer:
                     with torch.no_grad():
                         val_loss, val_stats = forward_fn(model, self._device, *val_inputs)
 
+                    # update running mean stat
+                    if vl_running_mean is None:
+                        vl_running_mean = val_loss.item()
+                    vl_running_mean = val_loss.item() * vlm_alpha + vl_running_mean * (1 - vlm_alpha)
+
                     self._writer.add_scalar('loss/val', val_loss.item(), step)
                     for k, v in val_stats.items():
                         self._writer.add_scalar('{}/val'.format(k), v, step)
                     for k, v in train_stats.items():
                         self._writer.add_scalar('{}/train'.format(k), v, step)
                     self._writer.file_writer.flush()
-                    print('step {0}: loss={1:.4f} \t val loss={2:.4f}'.format(step, train_stats['loss'], val_loss.item()))
+                    print('epoch {3}/{4}, step {0}: loss={1:.4f} \t val loss={2:.4f}'.format(step, train_stats['loss'], vl_running_mean, e, epochs))
                 else:
                     print('step {0}: loss={1:.4f}'.format(step, train_stats['loss']), end='\r')
                 step += 1
@@ -106,3 +120,7 @@ class Trainer:
                     if isinstance(model, nn.DataParallel):
                         save_module = model.module
                     torch.save(save_module, self._save_fname + '-{}.pt'.format(step))
+
+            if scheduler is not None:
+                scheduler.step(vl_running_mean)
+
