@@ -57,7 +57,7 @@ class Trainer:
         # initializer optimizer and lr scheduler
         optimizer = torch.optim.Adam(model.parameters(), self._config['lr'])
         vlm_alpha = self._config.get('vlm_alpha', 0.6)
-        lr_schedule = self._config.get('lr_schedule', 'ReduceLROnPlateau')
+        lr_schedule = self._config.get('lr_schedule', None)
         if lr_schedule == 'ReduceLROnPlateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
         elif lr_schedule is None:

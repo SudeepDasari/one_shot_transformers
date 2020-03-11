@@ -30,10 +30,10 @@ def rollout_bc(policy, env_type, device, height=224, widht=224, horizon=20, dept
             past_obs[-1].append(np.transpose(resize(obs['depth'][:,:,None], (width, height), False), (2, 0, 1))[None])
         if len(past_obs) > horizon:
             past_obs = past_obs[1:]
-        
+
         policy_in = [torch.from_numpy(np.concatenate([p[0] for p in past_obs], 0)[None]).to(device)]
         if depth:
-            policy_in = policy_in.append(torch.from_numpy(np.concatenate([p[1] for p in past_obs], 0)[None]).to(device))
+            policy_in.append(torch.from_numpy(np.concatenate([p[1] for p in past_obs], 0)[None]).to(device))
         with torch.no_grad():
             action = policy(policy_in, n_samples=5)[0]
 

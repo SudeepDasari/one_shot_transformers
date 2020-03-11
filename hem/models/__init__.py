@@ -8,6 +8,9 @@ def get_model(name):
     elif name == 'base rnn':
         from .basic_rnn import BaseRNN
         return BaseRNN
+    elif name == 'conv1D':
+        from .basic_rnn import Conv1D
+        return Conv1D
     elif name == 'resnet':
         from .basic_embedding import ResNetFeats
         return ResNetFeats

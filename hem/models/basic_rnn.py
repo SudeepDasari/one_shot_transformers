@@ -34,3 +34,24 @@ class BaseRNN(nn.Module):
                 x = x.reshape((L, B, self._in_dim))
         self._gru.flatten_parameters()
         return self._gru(x)[0]
+
+
+class Conv1D(nn.Module):
+    def __init__(self, in_dim, out_dim, k=7, BTC=True, norm=True):
+        super().__init__()
+        self._conv = nn.Conv1d(in_dim, out_dim, k, padding=k-1)
+        self._k = k
+        self._norm = lambda x: x
+        if norm:
+            self._norm = nn.BatchNorm1d(out_dim)
+        self._ac = nn.ReLU(inplace=True)
+        self._BTC = BTC
+    
+    def forward(self, x):
+        if self._BTC:
+            x = torch.transpose(x, 1, 2)
+        x = self._conv(x)[:,:,:-(k-1)]
+        x = self._ac(self._norm(x))
+        if self._BTC:
+            x = torch.transpose(x, 1, 2)
+        return x
