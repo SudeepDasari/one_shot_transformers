@@ -50,7 +50,7 @@ class Conv1D(nn.Module):
     def forward(self, x):
         if self._BTC:
             x = torch.transpose(x, 1, 2)
-        x = self._conv(x)[:,:,:-(k-1)]
+        x = self._conv(x)[:,:,:-(self._k-1)]
         x = self._ac(self._norm(x))
         if self._BTC:
             x = torch.transpose(x, 1, 2)
