@@ -28,14 +28,16 @@ class ImitationModule(nn.Module):
             l2 = nn.Linear(hidden, config['auxiliary']['out_dim'])
             self._aux_linear = nn.Sequential(l1, a1, l2)
     
-    def forward(self, images, depth=None):
+    def forward(self, joints, images, depth=None):
         vis_embed = self._embed(images, depth)
+        ac_embed = torch.cat((vis_embed, joints[:,:,-2:]), -1)
+        
         if self._aux:
             aux_pred = self._aux_linear(vis_embed)
-            state_embed = torch.cat((vis_embed, aux_pred.detach()), -1)
+            state_embed = torch.cat((ac_embed, aux_pred.detach()), -1)
             mean, sigma_inv, alpha = self._mdn(self._action_model(state_embed))
             return mean, sigma_inv, alpha, aux_pred 
-        mean, sigma_inv, alpha = self._mdn(self._action_model(vis_embed))
+        mean, sigma_inv, alpha = self._mdn(self._action_model(ac_embed))
         return mean, sigma_inv, alpha, None
 
 
@@ -50,19 +52,20 @@ if __name__ == '__main__':
     def forward(m, device, pairs, _):
         states, actions = batch_inputs(pairs, device)
         images = states['images'][:,:-1]
+        joints = states['joints']
         depth = None
         if 'depth' in states:
             depth = states['depth'][:,:-1]
 
         if config.get('output_pos', True):
-            actions = torch.cat((states['joints'][:,1:], actions[:,:,-1][:,:,None]), 2)
+            actions = torch.cat((joints[:,1:,:7], actions[:,:,-1][:,:,None]), 2)
         
-        mean, sigma_inv, alpha, pred_state = m(images, depth)
+        mean, sigma_inv, alpha, pred_state = m(joints[:,:-1], images, depth)
         l_mdn = loss(actions, mean, sigma_inv, alpha)
 
         stats = dict(mdn=l_mdn.item())
         if pred_state is not None:
-            state_loss = torch.mean(torch.sum((pred_state - states['joints'][:,:-1]) ** 2, (1, 2)))
+            state_loss = torch.mean(torch.sum((pred_state - joints[:,:-1,:7]) ** 2, (1, 2)))
             stats['aux_loss'] = state_loss.item()
         return l_mdn + config['auxiliary'].get('weight', 0.5) * state_loss, stats
     trainer.train(model, forward)

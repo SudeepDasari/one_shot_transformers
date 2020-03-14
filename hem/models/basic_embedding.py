@@ -158,19 +158,19 @@ class VGGFeats(nn.Module):
             self._has_depth = True
             c0_in += 1
         cc0 = CoordConv(c0_in, 64, 3, stride=2)
-        n0 = nn.BatchNorm2d(64)
+        n0 = nn.InstanceNorm2d(64, affine=True)
         a0 = nn.ReLU(inplace=True)
 
         cc1 = CoordConv(64, 128, 3, stride=2)
-        n1 = nn.BatchNorm2d(128)
+        n1 = nn.InstanceNorm2d(128, affine=True)
         a1 = nn.ReLU(inplace=True)
         p1 = nn.MaxPool2d(2)
 
         cc2_1 = CoordConv(128, 256, 3)
-        n2_1 = nn.BatchNorm2d(256)
+        n2_1 = nn.InstanceNorm2d(256, affine=True)
         a2_1 = nn.ReLU(inplace=True)
         cc2_2 = CoordConv(256, 256, 3)
-        n2_2 = nn.BatchNorm2d(256)
+        n2_2 = nn.InstanceNorm2d(256, affine=True)
         a2_2 = nn.ReLU(inplace=True)
         p2 = nn.AdaptiveAvgPool2d(1)
 

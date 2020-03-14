@@ -104,7 +104,8 @@ class AgentDemonstrations(Dataset):
         for j in range(self._T_pair + 1):
             t = traj.get(j * self._freq + i)
             img = resize(t['obs']['image'], self._im_dims, self._normalize)
-            pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=t['obs']['joint_pos'].astype(np.float32))
+            joint_gripper_state = np.concatenate((t['obs']['joint_pos'], t['obs']['gripper_qpos'])).astype(np.float32)
+            pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=joint_gripper_state)
             if self._depth:
                 pair['s_{}'.format(j)]['depth'] = np.transpose(resize(t['obs']['depth'][:,:,None], self._im_dims, False), (2, 0, 1))
             if j:
