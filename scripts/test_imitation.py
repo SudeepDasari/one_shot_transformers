@@ -14,6 +14,7 @@ from hem.robosuite import get_env
 import imageio
 from tqdm import tqdm
 from train_imitation import ImitationModule
+import pickle as pkl
 
 
 def rollout_bc(policy, env_type, device, height=224, widht=224, horizon=20, depth=False):
@@ -62,6 +63,7 @@ if __name__ == '__main__':
     parser.add_argument('config', type=str)
     parser.add_argument('--env', type=str, default='SawyerPickPlaceCan')
     parser.add_argument('--N', type=int, default=10)
+    parser.add_argument('--save_dir', default='.', type=str)
     args = parser.parse_args()
     config = parse_basic_config(args.config)
 
@@ -77,7 +79,8 @@ if __name__ == '__main__':
     depth = config['embedding'].get('depth', False)
     for i in range(args.N):
         traj = rollout_bc(policy, args.env, device, height, width, T, depth)
-        out = imageio.get_writer('out{}.gif'.format(i), fps=30)
+        pkl.dump(traj, open('{}/out{}.pkl'.format(args.save_dir, i), 'wb'))
+        out = imageio.get_writer('{}/out{}.gif'.format(args.save_dir, i), fps=30)
         for t in traj:
             out.append_data(t['obs']['image'])
         out.close()
