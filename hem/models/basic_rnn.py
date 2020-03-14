@@ -37,13 +37,13 @@ class BaseRNN(nn.Module):
 
 
 class Conv1D(nn.Module):
-    def __init__(self, in_dim, out_dim, k=7, BTC=True, norm=True):
+    def __init__(self, in_dim, out_dim, k=15, BTC=True, norm=True):
         super().__init__()
         self._conv = nn.Conv1d(in_dim, out_dim, k, padding=k-1)
         self._k = k
         self._norm = lambda x: x
         if norm:
-            self._norm = nn.BatchNorm1d(out_dim)
+            self._norm = nn.InstanceNorm1d(out_dim, affine=True)
         self._ac = nn.ReLU(inplace=True)
         self._BTC = BTC
     

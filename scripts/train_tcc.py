@@ -2,7 +2,7 @@ from hem.util import parse_basic_config
 import torch
 import argparse
 from hem.datasets import get_dataset
-from hem.models import get_model
+from hem.models import get_model, Trainer
 from torch.utils.data import DataLoader
 from multiprocessing import cpu_count
 from torch.utils.tensorboard import SummaryWriter
