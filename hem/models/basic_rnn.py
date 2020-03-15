@@ -43,7 +43,8 @@ class Conv1D(nn.Module):
         self._k = k
         self._norm = lambda x: x
         if norm:
-            self._norm = nn.InstanceNorm1d(out_dim, affine=True)
+            self._norm_layer = nn.LayerNorm(out_dim)
+            self._norm = lambda x: torch.transpose(self._norm_layer(torch.transpose(x, 1, 2)), 1, 2)
         self._ac = nn.ReLU(inplace=True)
         self._BTC = BTC
     
