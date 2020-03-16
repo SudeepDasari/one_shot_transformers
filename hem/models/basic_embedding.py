@@ -180,9 +180,8 @@ class VGGFeats(nn.Module):
 
         self._out_dim = out_dim
         linear = nn.Linear(256, out_dim)
-        linear_norm = nn.BatchNorm1d(out_dim)
         linear_ac = nn.ReLU(inplace=True)
-        self._linear = nn.Sequential(linear, linear_norm, linear_ac)
+        self._linear = nn.Sequential(linear, linear_ac)
 
     def forward(self, x, depth=None):
         if len(x.shape) == 5:
