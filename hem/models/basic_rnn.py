@@ -41,13 +41,17 @@ class Conv1D(nn.Module):
         super().__init__()
         self._conv = nn.Conv1d(in_dim, out_dim, k, padding=k-1)
         self._k = k
-        self._norm = lambda x: x
+        self._norm_layer = None
         if norm:
             self._norm_layer = nn.LayerNorm(out_dim)
-            self._norm = lambda x: torch.transpose(self._norm_layer(torch.transpose(x, 1, 2)), 1, 2)
         self._ac = nn.ReLU(inplace=True)
         self._BTC = BTC
-    
+
+    def _norm(self, x):
+        if self._norm_layer:
+            return torch.transpose(self._norm_layer(torch.transpose(x, 1, 2)), 1, 2)
+        return x
+
     def forward(self, x):
         if self._BTC:
             x = torch.transpose(x, 1, 2)

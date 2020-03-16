@@ -58,13 +58,13 @@ if __name__ == '__main__':
 
         if config.get('output_pos', True):
             actions = torch.cat((joints[:,1:,:7], actions[:,:,-1][:,:,None]), 2)
-        import pdb; pdb.set_trace()
+
         pred_actions, pred_state = m(joints[:,:-1], images, depth)
         l_ac = huber(pred_actions, actions)
-
+        
         stats = dict(act=l_ac.item())
         if pred_state is not None:
             state_loss = torch.mean(torch.sum((pred_state - joints[:,:-1,:7]) ** 2, (1, 2)))
             stats['aux_loss'] = state_loss.item()
-        return l_ac + config['auxiliary'].get('weight', 0.5) * state_loss, stats
+        return l_ac + config['auxiliary'].get('weight', 0.1) * state_loss, stats
     trainer.train(model, forward)
