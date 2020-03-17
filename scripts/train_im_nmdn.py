@@ -2,6 +2,7 @@ import torch
 from hem.models import get_model, Trainer
 from hem.models.util import batch_inputs
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ImitationModule(nn.Module):
@@ -16,28 +17,18 @@ class ImitationModule(nn.Module):
         self._action_model = action_model(**config['action_model'])
 
         # creates mixture density output
-        self._top = nn.Linear(**config['top'])
-
-        self._aux = False
-        if 'auxiliary' in config:
-            self._aux = True
-            hidden = config['auxiliary'].get('hidden_dim', 16)
-            l1 = nn.Linear(config['auxiliary']['in_dim'], hidden)
-            a1 = nn.ReLU(inplace=True)
-            l2 = nn.Linear(hidden, config['auxiliary']['out_dim'])
-            self._aux_linear = nn.Sequential(l1, a1, l2)
+        in_dim, self._out_dim, self._n_out = config['top']['in_dim'], config['top']['out_dim'], config['top']['n_outputs']
+        self._acs = nn.Linear(in_dim, self._out_dim * self._n_out)
+        self._alphas = nn.Linear(in_dim, self._n_out)
     
     def forward(self, joints, images, depth=None):
         vis_embed = self._embed(images, depth)
-        ac_embed = torch.cat((vis_embed, joints[:,:,-2:]), -1)
-        aux_pred = None
+        ac_embed = torch.cat((vis_embed, joints), -1)
+        action_model = self._action_model(ac_embed)
 
-        if self._aux:
-            aux_pred = self._aux_linear(vis_embed)
-            ac_embed = torch.cat((ac_embed, aux_pred.detach()), -1)
-        
-        pred_actions = self._top(self._action_model(ac_embed))
-        return pred_actions, aux_pred
+        acs = self._acs(action_model).reshape((action_model.shape[0], action_model.shape[1], self._n_out, self._out_dim))
+        alphas = F.softmax(self._alphas(action_model), -1)
+        return acs, alphas
 
 
 if __name__ == '__main__':
@@ -59,12 +50,9 @@ if __name__ == '__main__':
         if config.get('output_pos', True):
             actions = torch.cat((joints[:,1:,:7], actions[:,:,-1][:,:,None]), 2)
 
-        pred_actions, pred_state = m(joints[:,:-1], images, depth)
+        acs, alphas = m(joints[:,:-1], images, depth)
+        pred_actions = torch.sum(acs * alphas.unsqueeze(-1), 2)
         l_ac = huber(pred_actions, actions)
-        
-        stats = dict(act=l_ac.item())
-        if pred_state is not None:
-            state_loss = torch.mean(torch.sum((pred_state - joints[:,:-1,:7]) ** 2, (1, 2)))
-            stats['aux_loss'] = state_loss.item()
-        return l_ac + config['auxiliary'].get('weight', 0.1) * state_loss, stats
+        return l_ac, dict()
+
     trainer.train(model, forward)

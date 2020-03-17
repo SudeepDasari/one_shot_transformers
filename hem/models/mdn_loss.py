@@ -46,7 +46,11 @@ class MixtureDensitySampler:
         mean, sigma_inv, alpha = self._mdn_model(*inputs)[:3]
         if len(alpha.shape) == 3:
             mean, sigma_inv, alpha = mean[:,-1], sigma_inv[:,-1], alpha[:,-1]
-        
+
+        if n_samples == 0:
+            chosen = np.argmax(alpha.cpu().numpy(), axis=1)
+            return mean.cpu().numpy()[np.arange(mean.shape[0]), chosen]
+
         actions = []
         for m, s_inv, a in zip(mean.cpu().numpy(), sigma_inv.cpu().numpy(), alpha.cpu().numpy()):
             lk, ac = float('-inf'), None
