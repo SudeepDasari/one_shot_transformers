@@ -13,7 +13,8 @@ import numpy as np
 
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
-    def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, T_context=15, T_pair=1, N_pair=1, freq=1, mode='train', split=[0.9, 0.1]):
+    def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, 
+                T_context=15, T_pair=1, N_pair=1, freq=1, mode='train', split=[0.9, 0.1]):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or N_pair > 0, "Must return (s,a) pairs or context!"
@@ -32,6 +33,8 @@ class AgentDemonstrations(Dataset):
 
         self._files = files
         self._im_dims = (width, height)
+        self._render_dims = tuple(render_dims[::-1]) if render_dims is not None else self._im_dims
+        self._crop = tuple(crop) if crop is not None else (0, 0, 0, 0)
         self._depth = depth
         self._normalize = normalize
         self._T_context = T_context
@@ -47,7 +50,7 @@ class AgentDemonstrations(Dataset):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
 
-        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._im_dims[1], self._im_dims[0], self._depth)
+        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._render_dims[1], self._render_dims[0], self._depth)
         return self._proc_traj(traj)
 
     def _proc_traj(self, traj):
@@ -86,9 +89,9 @@ class AgentDemonstrations(Dataset):
         
         def _make_frame(n):
             obs = traj.get(n)['obs']
-            img = resize(obs['image'], self._im_dims, self._normalize)
+            img = self._crop_and_resize(obs['image'], self._normalize)
             if self._depth:
-                img = np.concatenate((img, resize(obs['depth'][:,:,None], self._im_dims, False)), -1)
+                img = np.concatenate((img, self._crop_and_resize(obs['depth'][:,:,None], False)), -1)
             return img[None]
 
         frames = [_make_frame(0)]
@@ -103,14 +106,26 @@ class AgentDemonstrations(Dataset):
         i = random.randint(0, len(traj) - self._T_pair * self._freq - 1)
         for j in range(self._T_pair + 1):
             t = traj.get(j * self._freq + i)
-            img = resize(t['obs']['image'], self._im_dims, self._normalize)
+            img = self._crop_and_resize(t['obs']['image'], self._normalize)
             joint_gripper_state = np.concatenate((t['obs']['joint_pos'], t['obs']['gripper_qpos'])).astype(np.float32)
             pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=joint_gripper_state)
             if self._depth:
-                pair['s_{}'.format(j)]['depth'] = np.transpose(resize(t['obs']['depth'][:,:,None], self._im_dims, False), (2, 0, 1))
+                pair['s_{}'.format(j)]['depth'] = np.transpose(self._crop_and_resize(t['obs']['depth'][:,:,None], False), (2, 0, 1))
             if j:
                 pair['a_{}'.format(j)] = t['action'].astype(np.float32)
         return pair
+    
+    def _crop_and_resize(self, img, normalize):
+        if self._crop[0] > 0:
+            img = img[self._crop[0]:]
+        if self._crop[1] > 0:
+            img = img[:-self._crop[1]]
+        if self._crop[2] > 0:
+            img = img[:,self._crop[2]:]
+        if self._crop[3] > 0:
+            img = img[:,:-self._crop[3]]
+        return resize(img, self._im_dims, normalize)
+
 
 if __name__ == '__main__':
     import time
