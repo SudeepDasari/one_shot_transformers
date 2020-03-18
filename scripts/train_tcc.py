@@ -22,8 +22,8 @@ if __name__ == '__main__':
 
     def forward(m, device, t1, t2, _):
         t1, t2 = t1.to(device), t2.to(device)
-        U = model(t1)
-        V = model(t2)
+        U = m(t1)
+        V = m(t2)
 
         B, chosen_i = np.arange(config['batch_size']), np.random.randint(t1.shape[1], size=config['batch_size'])
         deltas = torch.sum((U[B,chosen_i][:,None] - V) ** 2, dim=2)
@@ -33,12 +33,13 @@ if __name__ == '__main__':
         betas = torch.softmax(class_logits, 1)
         arange = torch.arange(betas.shape[1], dtype=torch.float32).to(device)
         mu = torch.sum(arange[None] * betas, 1)
-        sigma_squares = torch.sum(((arange - mu)[None] ** 2) * betas, 1)
+        sigma_squares = torch.sum(((arange[None] - mu[:,None]) ** 2) * betas, 1)
         mu_error = (mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device)) ** 2
-        loss = torch.mean(mu_error / sigma_squares + config.get('lambda', 0.5) * torch.log(sigma_squares))
-
+        loss = torch.mean(mu_error / (sigma_squares + 1e-6) + config.get('lambda', 0.005) * torch.log(sigma_squares + 1e-6))
+        
         argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
         accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
+        print(accuracy_stat)
         error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size']
         mu_error = torch.mean(mu_error).item()
         avg_sigma_sq = torch.mean(sigma_squares).item()

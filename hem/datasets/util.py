@@ -12,6 +12,9 @@ def resize(image, target_dim, normalize=False):
     else:
         resized = image
 
+    if len(resized.shape) == 2:
+        resized = resized[:,:,None]
+
     if normalize:
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape((1, 1, 3))
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape((1, 1, 3))
