@@ -19,7 +19,6 @@ if __name__ == '__main__':
     # parser model
     model_class = get_model(config['model'].pop('type'))
     model = model_class(**config['model'])
-    cross_entropy = nn.CrossEntropyLoss()
 
     def forward(m, device, t1, t2, _):
         t1, t2 = t1.to(device), t2.to(device)
@@ -30,11 +29,19 @@ if __name__ == '__main__':
         deltas = torch.sum((U[B,chosen_i][:,None] - V) ** 2, dim=2)
         v_hat = torch.sum(torch.nn.functional.softmax(-deltas, dim=1)[:,:,None] * V, dim=1)
         class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)
-        loss = cross_entropy(class_logits, torch.from_numpy(chosen_i).to(device))
+        
+        betas = torch.softmax(class_logits, 1)
+        arange = torch.arange(betas.shape[1], dtype=torch.float32).to(device)
+        mu = torch.sum(arange[None] * betas, 1)
+        sigma_squares = torch.sum(((arange - mu)[None] ** 2) * betas, 1)
+        mu_error = (mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device)) ** 2
+        loss = torch.mean(mu_error / sigma_squares + config.get('lambda', 0.5) * torch.log(sigma_squares))
 
         argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
         accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
         error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size']
+        mu_error = torch.mean(mu_error).item()
+        avg_sigma_sq = torch.mean(sigma_squares).item()
             
-        return loss, dict(accuracy=accuracy_stat, error=error_stat)
+        return loss, dict(accuracy=accuracy_stat, error=error_stat, mu=mu_error, sigma=avg_sigma_sq)
     trainer.train(model, forward)
