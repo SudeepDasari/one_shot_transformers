@@ -1,4 +1,5 @@
 from hem.robosuite.controllers.expert_pick_place import get_expert_trajectory
+from hem.robosuite.controllers.random_reach import get_random_trajectory
 import numpy as np
 from pyquaternion import Quaternion
 from hem.robosuite.controllers import PickPlaceController
@@ -8,15 +9,18 @@ import os
 import pickle as pkl
 
 
-def save_rollout(env_type, save_dir, camera_obs=True, N=0, renderer=False):
+def save_rollout(env_type, save_dir, camera_obs=True, random_reach=False, N=0, renderer=False):
     if isinstance(N, int):
         N = [N]
 
     for n in N:
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
             continue
-
-        traj = get_expert_trajectory(env_type, camera_obs, renderer)
+        
+        if random_reach:
+            traj = get_random_trajectory(env_type, camera_obs, renderer)
+        else:
+            traj = get_expert_trajectory(env_type, camera_obs, renderer)
         pkl.dump({'traj': traj, 'env_type': env_type}, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
 
@@ -29,6 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--env', default='SawyerPickPlaceCan', type=str, help="Environment name")
     parser.add_argument('--collect_cam', action='store_true', help="If flag then will collect camera observation")
     parser.add_argument('--renderer', action='store_true', help="If flag then will display rendering GUI")
+    parser.add_argument('--random_reach', action='store_true', help="If flag then will collect random reach policy data instead of expert pickplace")
     args = parser.parse_args()
     assert args.num_workers > 0, "num_workers must be positive!"
 
@@ -38,7 +43,7 @@ if __name__ == '__main__':
         assert os.path.isdir(args.save_dir), "directory specified but is file and not directory!"
 
     if args.num_workers == 1:
-        save_rollout(args.env, args.save_dir, args.collect_cam, list(range(args.N)), args.renderer)
+        save_rollout(args.env, args.save_dir, args.collect_cam, args.random_reach, list(range(args.N)), args.renderer)
     else:
         assert not args.renderer, "can't display rendering when using multiple workers"
 
@@ -47,5 +52,5 @@ if __name__ == '__main__':
             jobs = [range(i * n_per, (i + 1) * n_per) for i in range(args.num_workers - 1)]
             jobs.append(range((args.num_workers - 1) * n_per, args.N))
             
-            f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam)
+            f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam, args.random_reach)
             p.map(f, jobs)
