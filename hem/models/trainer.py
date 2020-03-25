@@ -48,10 +48,8 @@ class Trainer:
 
     def train(self, model, forward_fn):
         # wrap model in DataParallel if needed and transfer to correct device
-        if torch.cuda.device_count() > 1 and self._device_list is None:
-            model = nn.DataParallel(model)
-        elif self._device_list is not None and len(self._device_list) > 1:
-            model = nn.DataParallel(model, device_ids=self._device_list )
+        if self.device_count > 1:
+            model = nn.DataParallel(model, device_ids=self.device_list)
         model = model.to(self._device)
         
         # initializer optimizer and lr scheduler
@@ -124,3 +122,18 @@ class Trainer:
             if scheduler is not None:
                 scheduler.step(vl_running_mean)
 
+    @property
+    def device_count(self):
+        if self._device_list is None:
+            return torch.cuda.device_count()
+        return len(self._device_list)
+
+    @property
+    def device_list(self):
+        if self._device_list is None:
+            return [i for i in range(torch.cuda.device_count())]
+        return copy.deepcopy(self._device_list)
+
+    @property
+    def device(self):
+        return copy.deepcopy(self._device)
