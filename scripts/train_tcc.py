@@ -11,15 +11,39 @@ import numpy as np
 import datetime
 
 
+def classification_loss(chosen_i, class_logits, device='cuda:0'):
+    batch_size = class_logits.shape[0]
+    loss = torch.nn.functional.cross_entropy(class_logits, torch.from_numpy(chosen_i).to(device))
+    argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
+    accuracy_stat = np.sum(argmaxes == chosen_i) / batch_size
+    error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / batch_size
+    return loss, dict(accuracy=accuracy_stat, error=error_stat)
+
+
+def regression_loss(chosen_i, class_logits, device='cuda:0'):
+    betas = torch.softmax(class_logits, 1)
+    arange = torch.arange(betas.shape[1], dtype=torch.float32).to(device)
+    mu = torch.sum(arange[None] * betas, 1)
+    sigma_squares = torch.sum(((arange[None] - mu[:,None]) ** 2) * betas, 1)
+    mu_error = (mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device)) ** 2
+    loss = torch.mean(mu_error / (sigma_squares + 1e-6) + config.get('lambda', 0.1) * torch.log(sigma_squares + 1e-6))
+    
+    batch_size = class_logits.shape[0]
+    argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
+    accuracy_stat = np.sum(argmaxes == chosen_i) / batch_size
+    error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / batch_size
+    mu_error = torch.mean(torch.abs(mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device))).item()
+    avg_sigma = torch.mean(torch.sum(torch.abs(arange[None] - mu[:,None])  * betas, 1)).item()
+    return loss, dict(accuracy=accuracy_stat, error=error_stat, mu=mu_error, sigma=avg_sigma)
+
+
 if __name__ == '__main__':
     trainer = Trainer('tcc', "Trains Temporal Cycle Consistent Embedding on input data")
     config = trainer.config
     
-    
     # parser model
     model_class = get_model(config['model'].pop('type'))
     model = model_class(**config['model'])
-    cross_entropy = nn.CrossEntropyLoss()
 
     def forward(m, device, t1, t2, _):
         t1, t2 = t1.to(device), t2.to(device)
@@ -32,17 +56,7 @@ if __name__ == '__main__':
         v_hat = torch.sum(torch.nn.functional.softmax(-deltas, dim=1)[:,:,None] * V, dim=1)
         class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)
         
-        betas = torch.softmax(class_logits, 1)
-        arange = torch.arange(betas.shape[1], dtype=torch.float32).to(device)
-        mu = torch.sum(arange[None] * betas, 1)
-        sigma_squares = torch.sum(((arange[None] - mu[:,None]) ** 2) * betas, 1)
-        mu_error = (mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device)) ** 2
-        loss = torch.mean(mu_error / (sigma_squares + 1e-6) + config.get('lambda', 0.1) * torch.log(sigma_squares + 1e-6))
-        
-        argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
-        accuracy_stat = np.sum(argmaxes == chosen_i) / batch_size
-        error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / batch_size
-        mu_error = torch.mean(torch.abs(mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device))).item()
-        avg_sigma = torch.mean(torch.sum(torch.abs(arange[None] - mu[:,None])  * betas, 1)).item()
-        return loss, dict(accuracy=accuracy_stat, error=error_stat, mu=mu_error, sigma=avg_sigma)
+        if config['loss_type'] == 'regression':
+            return regression_loss(chosen_i, class_logits, device)
+        return classification_loss(chosen_i, class_logits, device)
     trainer.train(model, forward)
