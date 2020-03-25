@@ -26,17 +26,17 @@ if __name__ == '__main__':
 
     # build loss and queue
     cross_entropy = nn.CrossEntropyLoss()
-    V_q = []
+    V_q = list()
 
     def forward(m, device, t1, t2, _):
-        import pdb; pdb.set_trace()
+        global V_q
         # copy trailing model to correct device and apply momentum contrast to weights
         model_trail.to(device)
         alpha = config['momentum_alpha']
         assert 0 <= alpha <= 1, "alpha should be in [0,1]!"
         for p, p_trail in zip(model.parameters(), model_trail.parameters()):
             p_trail.data.mul_(alpha).add_(1 - alpha, p.detach().data)
-        
+     
         t1, t2 = t1.to(device), t2.to(device)
         U = m(t1)
         with torch.no_grad():
