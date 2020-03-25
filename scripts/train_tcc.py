@@ -26,7 +26,8 @@ if __name__ == '__main__':
         U = m(t1)
         V = m(t2)
 
-        B, chosen_i = np.arange(config['batch_size']), np.random.randint(t1.shape[1], size=config['batch_size'])
+        batch_size = t1.shape[0]
+        B, chosen_i = np.arange(batch_size), np.random.randint(t1.shape[1], size=batch_size)
         deltas = torch.sum((U[B,chosen_i][:,None] - V) ** 2, dim=2)
         v_hat = torch.sum(torch.nn.functional.softmax(-deltas, dim=1)[:,:,None] * V, dim=1)
         class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)
@@ -39,8 +40,8 @@ if __name__ == '__main__':
         loss = torch.mean(mu_error / (sigma_squares + 1e-6) + config.get('lambda', 0.5) * torch.log(sigma_squares + 1e-6))
         
         argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
-        accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
-        error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size']
+        accuracy_stat = np.sum(argmaxes == chosen_i) / batch_size
+        error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / batch_size
         mu_error = torch.mean(torch.abs(mu - torch.from_numpy(chosen_i.astype(np.float32)))).item()
         avg_sigma = torch.mean(torch.sum(torch.abs(arange[None] - mu[:,None])  * betas, 1)).item()
         return loss, dict(accuracy=accuracy_stat, error=error_stat, mu=mu_error, sigma=avg_sigma)
