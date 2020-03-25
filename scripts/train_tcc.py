@@ -36,12 +36,12 @@ if __name__ == '__main__':
         mu = torch.sum(arange[None] * betas, 1)
         sigma_squares = torch.sum(((arange[None] - mu[:,None]) ** 2) * betas, 1)
         mu_error = (mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device)) ** 2
-        loss = torch.mean(mu_error / (sigma_squares + 1e-6) + config.get('lambda', 0.5) * torch.log(sigma_squares + 1e-6))
+        loss = torch.mean(mu_error / (sigma_squares + 1e-6) + config.get('lambda', 0.1) * torch.log(sigma_squares + 1e-6))
         
         argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
         accuracy_stat = np.sum(argmaxes == chosen_i) / config['batch_size']
         error_stat = np.sqrt(np.sum(np.square(argmaxes - chosen_i))) / config['batch_size']
-        mu_error = torch.mean(torch.abs(mu - torch.from_numpy(chosen_i.astype(np.float32)))).item()
+        mu_error = torch.mean(torch.abs(mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device))).item()
         avg_sigma = torch.mean(torch.sum(torch.abs(arange[None] - mu[:,None])  * betas, 1)).item()
         return loss, dict(accuracy=accuracy_stat, error=error_stat, mu=mu_error, sigma=avg_sigma)
     trainer.train(model, forward)
