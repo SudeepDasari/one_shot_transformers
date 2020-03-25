@@ -1,14 +1,14 @@
-batch_size: 16
+batch_size: 8
 lr: 0.001
-epochs: 400
-loader_workers: 8
+epochs: 2000
+loader_workers: 4
 
 dataset:
   type: "agent"
   root_dir: ${ROBOT_DIR}/sawyer_can
   height: 224
   width: 224
-  depth: False
+  depth: True
   T_context: 0
   T_pair: 20
   freq: 4
@@ -19,11 +19,12 @@ auxiliary:
 
 embedding:
   type: 'vgg'
-  depth: False
+  depth: True
 
 action_model:
   type: "base rnn"
-  in_dim: 64
+  in_dim: 73
+  n_layers: 1
   out_dim: 32
 
 mdn:
