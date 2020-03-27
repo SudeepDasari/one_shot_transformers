@@ -7,7 +7,7 @@ from torchvision import models
 class BasicEmbeddingModel(nn.Module):
     def __init__(self, k=3, batch_norm=True):
         super(BasicEmbeddingModel, self).__init__()
-        norm_factory = lambda f: nn.BatchNorm2d(f) if batch_norm else lambda x: x
+        norm_factory = lambda f: nn.InstanceNorm2d(f, affine=True) if batch_norm else lambda x: x
 
         self._conv_1 = nn.Conv2d(3, 64, 7, stride=2, padding=3)
         self._conv_1_n = norm_factory(64)
@@ -31,17 +31,14 @@ class BasicEmbeddingModel(nn.Module):
         self._pool_4 = nn.MaxPool2d(2)
 
         self._conv_5_1 = nn.Conv3d(512, 512, k, padding=(2, 1, 1))
-        self._conv_5_1_n = nn.BatchNorm3d(512) if batch_norm else lambda x: x
+        self._conv_5_1_n = nn.InstanceNorm3d(512, affine=True) if batch_norm else lambda x: x
         self._conv_5_2 = nn.Conv3d(512, 512, k, padding=(2, 1, 1))
-        self._conv_5_2_n = nn.BatchNorm3d(512) if batch_norm else lambda x: x
+        self._conv_5_2_n = nn.InstanceNorm3d(512, affine=True) if batch_norm else lambda x: x
         assert k % 2 == 1, "context must be odd"
         self._k = k 
 
         self._fc6_1 = nn.Linear(512, 512)
-        self._fc6_1_n = nn.BatchNorm1d(512) if batch_norm else lambda x: x
         self._fc6_2 = nn.Linear(512, 512)
-        self._fc6_2_n = nn.BatchNorm1d(512) if batch_norm else lambda x: x
-
         self._embed = nn.Linear(512, 128)
 
     def forward(self, x):
@@ -70,8 +67,8 @@ class BasicEmbeddingModel(nn.Module):
         x = torch.cat(x, 1)
         
         x = x.reshape((B * T, 512))
-        x = F.relu(self._fc6_1_n(self._fc6_1(x)))
-        x = F.relu(self._fc6_2_n(self._fc6_2(x)))
+        x = F.relu(self._fc6_1(x))
+        x = F.relu(self._fc6_2(x))
 
         embed = self._embed(x)
         embed = embed.reshape((B, T, 128))
