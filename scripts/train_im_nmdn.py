@@ -52,7 +52,7 @@ if __name__ == '__main__':
 
         acs, alphas = m(joints[:,:-1], images, depth)
         pred_actions = torch.sum(acs * alphas.unsqueeze(-1), 2)
-        l_ac = huber(pred_actions, actions)
+        l_ac = torch.mean(torch.sum((pred_actions - actions) ** 2, 2))
         return l_ac, dict()
 
     trainer.train(model, forward)

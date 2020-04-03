@@ -39,7 +39,6 @@ if __name__ == '__main__':
         for p, p_trail in zip(model.parameters(), model_trail.parameters()):
             p_trail.data.mul_(alpha).add_(1 - alpha, p.detach().data)
      
-        import pdb; pdb.set_trace()
         t1, t2 = t1.to(device), t2.to(device)
         U = m(t1)
         with torch.no_grad():
