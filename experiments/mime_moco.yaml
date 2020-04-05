@@ -1,0 +1,11 @@
+dataset:
+  type: "paired agent teacher"
+  data_dir: ${MIME_DIR}
+  N_pair: 0
+  crop: [0, 0, 150, 150]
+  pretend_unpaired: True
+  color_jitter: [0.33, 0.4, 0.4]
+  rand_gray: 0.1
+  rand_crop: [15, 15]
+  rand_rotate: 15
+  rand_translate: [10, 10]

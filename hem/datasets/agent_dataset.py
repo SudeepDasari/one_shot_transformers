@@ -6,7 +6,7 @@ import random
 import os
 import torch
 from hem.datasets.util import resize
-from hem.datasets.savers.render_loader import ImageRenderWrapper
+# from hem.datasets.savers.render_loader import ImageRenderWrapper
 import random
 import numpy as np
 
@@ -21,7 +21,10 @@ class AgentDemonstrations(Dataset):
         assert T_pair >= 1, "Each state/action pair must have at least 1 time-step"
 
         shuffle_rng = random.Random(SHUFFLE_RNG)
-        all_files = sorted(glob.glob('{}/*.pkl'.format(os.path.expanduser(root_dir))))
+        root_dir = os.path.expanduser(root_dir)
+        if 'pkl' not in root_dir:
+            root_dir = os.path.join(root_dir, '*.pkl')
+        all_files = sorted(glob.glob(root_dir))
         shuffle_rng.shuffle(all_files)
         
         pivot = int(len(all_files) * split[0])
@@ -50,7 +53,7 @@ class AgentDemonstrations(Dataset):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
 
-        traj = ImageRenderWrapper(pkl.load(open(self._files[index], 'rb'))['traj'], self._render_dims[1], self._render_dims[0], self._depth)
+        traj = pkl.load(open(self._files[index], 'rb'))['traj']
         return self._proc_traj(traj)
 
     def _proc_traj(self, traj):

@@ -1,5 +1,5 @@
 try:
-    from mujoco_py import load_model_from_xml, MjSim, MjRenderContextOffscreen
+    # from mujoco_py import load_model_from_xml, MjSim, MjRenderContextOffscreen
     from hem.robosuite import postprocess_model_xml
 except:
     # in case experiments don't require rendering ignore failure
