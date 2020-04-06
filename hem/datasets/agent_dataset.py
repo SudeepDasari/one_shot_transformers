@@ -10,6 +10,7 @@ from hem.datasets.util import resize
 import random
 import numpy as np
 import io
+import tqdm
 
 
 SHUFFLE_RNG = 2843014334
@@ -46,6 +47,9 @@ class AgentDemonstrations(Dataset):
         self._N_pair = N_pair
         self._freq = freq
         self._cache = {} if cache else None
+        for f_name in tqdm.tqdm(self._files):
+            with open(f_name, 'rb') as f:
+                self._cache[f_name] = f.read()
 
     def __len__(self):
         return len(self._files)
