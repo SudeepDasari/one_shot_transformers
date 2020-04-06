@@ -9,6 +9,9 @@ import torch.nn as nn
 import random
 import numpy as np
 import cv2
+import pickle as pkl
+import os
+import glob
 
 
 def _extract_images(traj, im_dims=(224, 224), frames=15):
@@ -40,6 +43,7 @@ if __name__ == '__main__':
     parser.add_argument('env1', type=str)
     parser.add_argument('env2', type=str)
     parser.add_argument('--N_compars', type=int, default=10)
+    parser.add_argument('--T', type=int, default=15)
     args = parser.parse_args()
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -49,13 +53,25 @@ if __name__ == '__main__':
     model = model.eval()
     model = model.to(device)
 
-    env1_traj = _extract_images(get_expert_trajectory(args.env1))[None]
-    env2_trajs = [_extract_images(get_expert_trajectory(args.env2))[None] for _ in range(args.N_compars)]
+    if args.env1 == 'RBH':
+        env1_traj = _extract_images(pkl.load(open(os.environ['RBH_ENV1'] , 'rb'))['traj'], frames=args.T)[None]
+    else:
+        env1_traj = _extract_images(get_expert_trajectory(args.env1), frames=args.T)[None]
+    
+    if args.env2 == 'RBH':
+        env2_trajs = [_extract_images(pkl.load(open(f , 'rb'))['traj'], frames=args.T)[None] for f in glob.glob(os.environ['RBH_ENV2'])]
+        args.N_compars = len(env2_trajs)
+    else:
+        env2_trajs = [_extract_images(get_expert_trajectory(args.env2), frames=args.T)[None] for _ in range(args.N_compars)]
     
     images = np.concatenate([env1_traj] + env2_trajs, 0)
     with torch.no_grad():
-        embeds = model(torch.from_numpy(images).to(device)).cpu().numpy()
-
+        embeds = []
+        for b in range(images.shape[0] // 10 + 1):
+            e = model(torch.from_numpy(images[b * 10:(b + 1) * 10]).to(device)).cpu().numpy()
+            embeds.append(e)
+        embeds = np.concatenate(embeds, 0)
+    
     env1_vid, env2_vids = images[0], images[1:]
     env1_embed = embeds[0]
     env2_embeds = embeds[1:]
@@ -66,7 +82,7 @@ if __name__ == '__main__':
         order = deltas.reshape(-1).argsort()
 
         img_t = _to_uint(env1_vid[t])
-        for o in order[:10]:
+        for o in order[:5]:
             traj, traj_t = int(o // env1_embed.shape[0]), o % env1_embed.shape[0]
             img_t = np.concatenate((img_t, _to_uint(env2_vids[traj, traj_t])), 0)
         all_images.append(img_t)

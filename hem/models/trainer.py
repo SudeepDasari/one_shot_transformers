@@ -14,7 +14,7 @@ import copy
 
 
 class Trainer:
-    def __init__(self, save_name='train', description="Default model trainer"):
+    def __init__(self, save_name='train', description="Default model trainer", comp_grad=True):
         now = datetime.datetime.now()
         parser = argparse.ArgumentParser(description=description)
         parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
@@ -41,12 +41,13 @@ class Trainer:
         shutil.copyfile(args.experiment_file, os.path.join(save_dir, 'config.yaml'))
         self._writer = SummaryWriter(log_dir=os.path.join(save_dir, 'log'))
         self._save_fname = os.path.join(save_dir, 'model_save')
+        self._comp_grad = comp_grad
 
     @property
     def config(self):
         return copy.deepcopy(self._config)
 
-    def train(self, model, forward_fn):
+    def train(self, model, forward_fn, weights_fn=None):
         # wrap model in DataParallel if needed and transfer to correct device
         if self.device_count > 1:
             model = nn.DataParallel(model, device_ids=self.device_list)
@@ -76,7 +77,8 @@ class Trainer:
             for inputs in self._train_loader:
                 optimizer.zero_grad()
                 loss_i, stats_i = forward_fn(model, self._device, *inputs)
-                loss_i.backward()
+                if self._comp_grad:
+                    loss_i.backward()
                 optimizer.step()
                 
                 # calculate iter stats
@@ -115,7 +117,9 @@ class Trainer:
 
                 if step % save_freq == 0:
                     save_module = model
-                    if isinstance(model, nn.DataParallel):
+                    if weights_fn is not None:
+                        save_module = weights_fn()
+                    elif isinstance(model, nn.DataParallel):
                         save_module = model.module
                     torch.save(save_module, self._save_fname + '-{}.pt'.format(step))
 

@@ -1,3 +1,10 @@
+batch_size: 2
+lr: 0.001
+epochs: 200
+loader_workers: 4
+save_freq: 5000
+moco_queue_size: 4096
+
 dataset:
   type: "paired agent teacher"
   data_dir: ${MIME_DIR}
@@ -9,3 +16,6 @@ dataset:
   rand_crop: [15, 15]
   rand_rotate: 15
   rand_translate: [10, 10]
+
+model:
+  type: "base traj"

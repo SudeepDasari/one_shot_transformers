@@ -17,4 +17,7 @@ def get_model(name):
     elif name == 'vgg':
         from .basic_embedding import VGGFeats
         return VGGFeats
+    elif name == 'base traj':
+        from .traj_embed import BaseTraj
+        return BaseTraj
     raise NotImplementedError
