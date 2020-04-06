@@ -9,12 +9,13 @@ from hem.datasets.util import resize
 # from hem.datasets.savers.render_loader import ImageRenderWrapper
 import random
 import numpy as np
+import io
 
 
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, 
-                T_context=15, T_pair=1, N_pair=1, freq=1, mode='train', split=[0.9, 0.1]):
+                T_context=15, T_pair=1, N_pair=1, freq=1, mode='train', split=[0.9, 0.1], cache=False):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or N_pair > 0, "Must return (s,a) pairs or context!"
@@ -44,6 +45,7 @@ class AgentDemonstrations(Dataset):
         self._T_pair = T_pair
         self._N_pair = N_pair
         self._freq = freq
+        self._cache = {} if cache else None
 
     def __len__(self):
         return len(self._files)
@@ -53,7 +55,14 @@ class AgentDemonstrations(Dataset):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
 
-        traj = pkl.load(open(self._files[index], 'rb'))['traj']
+        if self._cache is None:
+            traj = pkl.load(open(self._files[index], 'rb'))['traj']
+        else:
+            f_name = self._files[index]
+            if f_name not in self._cache:
+                with open(f_name, 'rb') as f:
+                    self._cache[f_name] = f.read()
+            f = pkl.load(io.BytesIO(self._cache[f_name]))['traj']
         return self._proc_traj(traj)
 
     def _proc_traj(self, traj):
