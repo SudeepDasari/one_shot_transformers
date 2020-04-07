@@ -31,7 +31,7 @@ class _MoCoWrapper(nn.Module):
 
 
 if __name__ == '__main__':
-    trainer = Trainer('traj_MoCo', "Trains Trajectory MoCo on input data", comp_grad=False)
+    trainer = Trainer('traj_MoCo', "Trains Trajectory MoCo on input data", comp_grad=False, drop_last=True)
     config = trainer.config
     
     # get MoCo params
@@ -54,7 +54,7 @@ if __name__ == '__main__':
 
     def forward(model, device, b1, b2):
         global moco_queue, moco_ptr, temperature
-        model.momentum_update()
+        moco_model.momentum_update()
         labels = torch.zeros(b1.shape[0], dtype=torch.long).to(device)
 
         # order for shuffled bnorm

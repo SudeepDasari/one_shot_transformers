@@ -14,7 +14,7 @@ import copy
 
 
 class Trainer:
-    def __init__(self, save_name='train', description="Default model trainer", comp_grad=True):
+    def __init__(self, save_name='train', description="Default model trainer", comp_grad=True, drop_last=False):
         now = datetime.datetime.now()
         parser = argparse.ArgumentParser(description=description)
         parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
@@ -31,8 +31,8 @@ class Trainer:
         dataset_class = get_dataset(self._config['dataset'].pop('type'))
         dataset = dataset_class(**self._config['dataset'], mode='train')
         val_dataset = dataset_class(**self._config['dataset'], mode='val')
-        self._train_loader = DataLoader(dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=self._config.get('loader_workers', cpu_count()))
-        self._val_loader = DataLoader(val_dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=1)
+        self._train_loader = DataLoader(dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=self._config.get('loader_workers', cpu_count()), drop_last=drop_last)
+        self._val_loader = DataLoader(val_dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=1, drop_last=drop_last)
 
         # set of file saving
         save_dir = os.path.join(self._config.get('save_path', './'), '{}_ckpt-{}-{}_{}-{}-{}'.format(save_name, now.hour, now.minute, now.day, now.month, now.year))

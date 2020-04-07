@@ -19,8 +19,8 @@ class BaseTraj(nn.Module):
         B, T, C, H, W = vids.shape
         imgs = vids.reshape((B * T, C, H, W))
         embeds = self._resnet_features(imgs).reshape((B, T, 2048))
-        embeds = self._pe(embeds)
-        embeds = self._trans(embeds)
+        embeds = self._pe(embeds.transpose(0, 1))
+        embeds = self._trans(embeds).transpose(0, 1)
         embeds = torch.mean(embeds, 1)
         return self._out(embeds)
 
@@ -43,9 +43,9 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
+        pe = pe.unsqueeze(0).transpose(0, 1)
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x + self.pe[:,:x.size(1)]
+        x = x + self.pe[:x.size(0)]
         return self.dropout(x)
