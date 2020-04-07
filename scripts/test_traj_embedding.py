@@ -81,7 +81,10 @@ if __name__ == '__main__':
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = torch.load(args.model_restore, map_location=device)
-    model = model.eval().to(device)
+    model = model.eval()
+    if torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
+    model = model.to(device)
 
     config_path = args.model_config if args.model_config else os.path.join(os.path.dirname(args.model_restore), 'config.yaml')
     config = parse_basic_config(config_path)['dataset']
