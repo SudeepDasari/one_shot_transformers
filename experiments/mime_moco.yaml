@@ -8,7 +8,7 @@ log_freq: 50
 
 dataset:
   type: "paired agent teacher"
-  data_dir: ${MIME_DIR}
+  root_dir: ${MIME_DIR}
   N_pair: 0
   #  cache: True
   crop: [0, 0, 150, 150]

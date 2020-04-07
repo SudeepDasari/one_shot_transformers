@@ -4,8 +4,8 @@ import random
 
 
 class TeacherDemonstrations(AgentDemonstrations):
-    def __init__(self, teacher_dir,  **kwargs):
-        super().__init__(teacher_dir, **kwargs)
+    def __init__(self, root_dir,  **kwargs):
+        super().__init__(root_dir, **kwargs)
 
     def _proc_traj(self, traj):
         return self._make_context(traj)

@@ -70,10 +70,10 @@ if __name__ == '__main__':
         loss = cross_entropy(logits, labels)
         try:
             loss.backward()
+            moco_queue[:,moco_ptr:moco_ptr+b1.shape[0]] = k.transpose(1, 0)
+            moco_ptr = (moco_ptr + config['batch_size']) % moco_queue.shape[1]
         except RuntimeError:
             pass
-        moco_queue[:,moco_ptr:moco_ptr+b1.shape[0]] = k.transpose(1, 0)
-        moco_ptr = (moco_ptr + config['batch_size']) % moco_queue.shape[1]
 
         top_k = torch.topk(logits, 5, dim=1)[1].cpu().numpy()
         acc_1 = np.sum(top_k[:,0] == 0) / b1.shape[0]

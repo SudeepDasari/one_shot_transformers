@@ -30,9 +30,9 @@ class AgentTeacherDataset(Dataset):
 
 
 class PairedAgentTeacherDataset(Dataset):
-    def __init__(self, data_dir, pretend_unpaired=False, color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, **params):
-        self._agent_dataset = AgentDemonstrations(os.path.join(data_dir, 'traj*_robot.pkl'), normalize=False, **params)
-        self._teacher_dataset = TeacherDemonstrations(os.path.join(data_dir, 'traj*_human.pkl'), normalize=False, **params)
+    def __init__(self, root_dir, pretend_unpaired=False, color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, **params):
+        self._agent_dataset = AgentDemonstrations(os.path.join(root_dir, 'traj*_robot.pkl'), normalize=False, **params)
+        self._teacher_dataset = TeacherDemonstrations(os.path.join(root_dir, 'traj*_human.pkl'), normalize=False, **params)
         assert pretend_unpaired or len(self._agent_dataset) == len(self._teacher_dataset), "Lengths must match if data is paired!"
 
         self._pretend_unpaired = pretend_unpaired
@@ -60,7 +60,8 @@ class PairedAgentTeacherDataset(Dataset):
                 context = self._agent_dataset[index][1]
             else:
                 context = self._teacher_dataset[index - len(self._agent_dataset)]
-            return self._randomize(context), self._randomize(context)
+            ctx1 = self._randomize(context.copy())
+            return ctx1, self._randomize(context)
         
         # pairs aren't normalized, fix later for imitation learning
         _, agent_context = self._agent_dataset[index]

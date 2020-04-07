@@ -5,7 +5,7 @@ import glob
 import random
 import os
 import torch
-from hem.datasets.util import resize
+from hem.datasets.util import resize, crop
 # from hem.datasets.savers.render_loader import ImageRenderWrapper
 import random
 import numpy as np
@@ -129,15 +129,7 @@ class AgentDemonstrations(Dataset):
         return pair
     
     def _crop_and_resize(self, img, normalize):
-        if self._crop[0] > 0:
-            img = img[self._crop[0]:]
-        if self._crop[1] > 0:
-            img = img[:-self._crop[1]]
-        if self._crop[2] > 0:
-            img = img[:,self._crop[2]:]
-        if self._crop[3] > 0:
-            img = img[:,:-self._crop[3]]
-        return resize(img, self._im_dims, normalize)
+        return resize(crop(img, self._crop), self._im_dims, normalize)
 
 
 if __name__ == '__main__':
