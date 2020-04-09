@@ -14,7 +14,7 @@ import copy
 
 
 class Trainer:
-    def __init__(self, save_name='train', description="Default model trainer", comp_grad=True, drop_last=False):
+    def __init__(self, save_name='train', description="Default model trainer", drop_last=False):
         now = datetime.datetime.now()
         parser = argparse.ArgumentParser(description=description)
         parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
@@ -41,33 +41,28 @@ class Trainer:
         shutil.copyfile(args.experiment_file, os.path.join(save_dir, 'config.yaml'))
         self._writer = SummaryWriter(log_dir=os.path.join(save_dir, 'log'))
         self._save_fname = os.path.join(save_dir, 'model_save')
-        self._comp_grad = comp_grad
 
     @property
     def config(self):
         return copy.deepcopy(self._config)
 
-    def train(self, model, forward_fn, weights_fn=None):
+    def train(self, model, train_fn, weights_fn=None, val_fn=None):
         # wrap model in DataParallel if needed and transfer to correct device
         if self.device_count > 1:
             model = nn.DataParallel(model, device_ids=self.device_list)
         model = model.to(self._device)
         
         # initializer optimizer and lr scheduler
-        optimizer = torch.optim.Adam(model.parameters(), self._config['lr'])
-        vlm_alpha = self._config.get('vlm_alpha', 0.6)
-        lr_schedule = self._config.get('lr_schedule', None)
-        if lr_schedule == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
-        elif lr_schedule is None:
-            scheduler = None
-        else:
-            raise NotImplementedError
+        optimizer, scheduler = self._build_optimizer_and_scheduler(model)
 
         # initialize constants:
         epochs = self._config.get('epochs', 1)
+        vlm_alpha = self._config.get('vlm_alpha', 0.6)
         log_freq = self._config.get('log_freq', 20)
         save_freq = self._config.get('save_freq', 5000)
+
+        if val_fn is None:
+            val_fn = train_fn
 
         step = 0
         train_stats = {'loss': 0}
@@ -75,11 +70,9 @@ class Trainer:
         vl_running_mean = None
         for e in range(epochs):
             for inputs in self._train_loader:
-                optimizer.zero_grad()
-                loss_i, stats_i = forward_fn(model, self._device, *inputs)
-                if self._comp_grad:
-                    loss_i.backward()
-                optimizer.step()
+                self._zero_grad(optimizer)
+                loss_i, stats_i = train_fn(model, self._device, *inputs)
+                self._step_optim(loss_i, step, optimizer)
                 
                 # calculate iter stats
                 mod_step = step % log_freq
@@ -97,7 +90,7 @@ class Trainer:
                         val_inputs = next(val_iter)
 
                     with torch.no_grad():
-                        val_loss, val_stats = forward_fn(model, self._device, *val_inputs)
+                        val_loss, val_stats = val_fn(model, self._device, *val_inputs)
 
                     # update running mean stat
                     if vl_running_mean is None:
@@ -122,9 +115,7 @@ class Trainer:
                     elif isinstance(model, nn.DataParallel):
                         save_module = model.module
                     torch.save(save_module, self._save_fname + '-{}.pt'.format(step))
-
-            if scheduler is not None:
-                scheduler.step(vl_running_mean)
+            self._step_scheduler(scheduler, vl_running_mean)
 
     @property
     def device_count(self):
@@ -141,3 +132,25 @@ class Trainer:
     @property
     def device(self):
         return copy.deepcopy(self._device)
+
+    def _build_optimizer_and_scheduler(self, model):
+        optimizer = torch.optim.Adam(model.parameters(), self._config['lr'])
+        lr_schedule = self._config.get('lr_schedule', None)
+        if lr_schedule == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+        elif lr_schedule is None:
+            scheduler = None
+        else:
+            raise NotImplementedError
+        return optimizer, scheduler
+    
+    def _step_optim(self, loss, step, optimizer):
+        loss.backward()
+        optimizer.step()
+
+    def _zero_grad(self, optimizer):
+        optimizer.zero_grad()
+
+    def _step_scheduler(self, scheduler, vl):
+        if scheduler is not None:
+            scheduler.step(vl)

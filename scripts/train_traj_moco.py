@@ -47,13 +47,17 @@ if __name__ == '__main__':
 
     # initialize queue
     moco_queue = torch.randn((model.dim, queue_size), dtype=torch.float32).to(trainer.device)
-    moco_ptr = 0
+    moco_ptr, last_k = 0, None
 
     # build loss_fn
     cross_entropy = torch.nn.CrossEntropyLoss()
 
-    def forward(model, device, b1, b2):
-        global moco_queue, moco_ptr, temperature
+    def train_forward(model, device, b1, b2):
+        global moco_queue, moco_ptr, temperature, last_k
+        if last_k is not None:
+            moco_queue[:,moco_ptr:moco_ptr+b1.shape[0]] = last_k
+            moco_ptr = (moco_ptr + config['batch_size']) % moco_queue.shape[1]
+
         moco_model.momentum_update()
         labels = torch.zeros(b1.shape[0], dtype=torch.long).to(device)
 
@@ -68,15 +72,16 @@ if __name__ == '__main__':
         l_neg = torch.matmul(q, moco_queue)
         logits = torch.cat((l_pos, l_neg), 1) / temperature
         loss = cross_entropy(logits, labels)
-        try:
-            loss.backward()
-            moco_queue[:,moco_ptr:moco_ptr+b1.shape[0]] = k.transpose(1, 0)
-            moco_ptr = (moco_ptr + config['batch_size']) % moco_queue.shape[1]
-        except RuntimeError:
-            pass
 
+        last_k = k.transpose(1, 0)
         top_k = torch.topk(logits, 5, dim=1)[1].cpu().numpy()
         acc_1 = np.sum(top_k[:,0] == 0) / b1.shape[0]
         acc_5 = np.sum([ar.any() for ar in top_k == 0]) / b1.shape[0]
         return loss, {'acc1': acc_1, 'acc5': acc_5}
-    trainer.train(moco_model, forward, moco_model.wrapped_model)
+    
+    def val_forward(model, device, b1, b2):
+        global last_k, train_forward
+        rets = train_forward(model, device, b1, b2)
+        last_k = None
+        return rets
+    trainer.train(moco_model, train_forward, moco_model.wrapped_model, val_fn=val_forward)
