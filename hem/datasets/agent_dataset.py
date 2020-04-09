@@ -16,7 +16,7 @@ import tqdm
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, 
-                T_context=15, T_pair=1, N_pair=1, freq=1, mode='train', split=[0.9, 0.1], cache=False):
+                T_context=15, T_pair=1, N_pair=1, freq=1, mode='train', split=[0.9, 0.1], cache=False, state_name='joint_pos'):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or N_pair > 0, "Must return (s,a) pairs or context!"
@@ -47,6 +47,7 @@ class AgentDemonstrations(Dataset):
         self._N_pair = N_pair
         self._freq = freq
         self._cache = {} if cache else None
+        self._state_name = state_name
 
     def __len__(self):
         return len(self._files)
@@ -120,7 +121,7 @@ class AgentDemonstrations(Dataset):
         for j in range(self._T_pair + 1):
             t = traj.get(j * self._freq + i)
             img = self._crop_and_resize(t['obs']['image'], self._normalize)
-            joint_gripper_state = np.concatenate((t['obs']['joint_pos'], t['obs']['gripper_qpos'])).astype(np.float32)
+            joint_gripper_state = np.concatenate((t['obs'][self._state_name], t['obs']['gripper_qpos'])).astype(np.float32)
             pair['s_{}'.format(j)] = dict(image=np.transpose(img, (2, 0, 1)), state=joint_gripper_state)
             if self._depth:
                 pair['s_{}'.format(j)]['depth'] = np.transpose(self._crop_and_resize(t['obs']['depth'][:,:,None], False), (2, 0, 1))
