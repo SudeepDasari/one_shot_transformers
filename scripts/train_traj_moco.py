@@ -29,6 +29,9 @@ class _MoCoWrapper(nn.Module):
     def wrapped_model(self):
         return self._mq
 
+    def parameters(self, recurse=True):
+        return self._mq.parameters(recurse)
+
 
 if __name__ == '__main__':
     trainer = Trainer('traj_MoCo', "Trains Trajectory MoCo on input data", comp_grad=False, drop_last=True)

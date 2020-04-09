@@ -76,7 +76,7 @@ class Trainer:
                 
                 # calculate iter stats
                 mod_step = step % log_freq
-                train_stats['loss'] = (loss_i.item() + mod_step * train_stats['loss']) / (mod_step + 1)
+                train_stats['loss'] = (self._loss_to_scalar(loss_i) + mod_step * train_stats['loss']) / (mod_step + 1)
                 for k, v in stats_i.items():
                     if k not in train_stats:
                         train_stats[k] = 0
@@ -91,13 +91,14 @@ class Trainer:
 
                     with torch.no_grad():
                         val_loss, val_stats = val_fn(model, self._device, *val_inputs)
+                        val_loss = self._loss_to_scalar(val_loss)
 
                     # update running mean stat
                     if vl_running_mean is None:
-                        vl_running_mean = val_loss.item()
-                    vl_running_mean = val_loss.item() * vlm_alpha + vl_running_mean * (1 - vlm_alpha)
+                        vl_running_mean = val_loss
+                    vl_running_mean = val_loss * vlm_alpha + vl_running_mean * (1 - vlm_alpha)
 
-                    self._writer.add_scalar('loss/val', val_loss.item(), step)
+                    self._writer.add_scalar('loss/val', val_loss, step)
                     for k, v in val_stats.items():
                         self._writer.add_scalar('{}/val'.format(k), v, step)
                     for k, v in train_stats.items():
@@ -154,3 +155,6 @@ class Trainer:
     def _step_scheduler(self, scheduler, vl):
         if scheduler is not None:
             scheduler.step(vl)
+
+    def _loss_to_scalar(self, loss):
+        return loss.item()

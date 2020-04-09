@@ -11,6 +11,9 @@ def get_dataset(name):
     elif name == 'paired agent teacher':
         from .agent_teacher_dataset import PairedAgentTeacherDataset
         return PairedAgentTeacherDataset
+    elif name == 'labeled agent teacher':
+        from .agent_teacher_dataset import LabeledAgentTeacherDataset
+        return LabeledAgentTeacherDataset
     elif name == 'agent':
         from .agent_dataset import AgentDemonstrations
         return AgentDemonstrations

@@ -104,3 +104,30 @@ class PairedAgentTeacherDataset(Dataset):
                 fr /= 255
         frames = np.concatenate([fr[None] for fr in frames], 0).astype(np.float32)
         return np.transpose(frames, (0, 3, 1, 2))
+
+
+class LabeledAgentTeacherDataset(PairedAgentTeacherDataset):
+    def __init__(self, root_dir, color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, **params):
+        self._agent_dataset = AgentDemonstrations(os.path.join(root_dir, 'traj*_robot.pkl'), normalize=False, **params)
+        self._teacher_dataset = TeacherDemonstrations(os.path.join(root_dir, 'traj*_human.pkl'), normalize=False, **params)
+
+        self._color_jitter = color_jitter
+        self._rand_crop = rand_crop
+        self._rand_rot = rand_rotate if rand_rotate is not None else 0
+        if not is_rad:
+            self._rand_rot = np.radians(self._rand_rot)
+        self._rand_trans = np.array(rand_translate if rand_translate is not None else [0, 0])
+        self._rand_gray = rand_gray
+        self._normalize = normalize
+    
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+        assert 0 <= index < len(self), "invalid index!"
+
+        if index < len(self._agent_dataset):
+            context = self._agent_dataset[index][1]
+        else:
+            context = self._teacher_dataset[index - len(self._agent_dataset)]
+        ctx1 = self._randomize(context.copy())
+        return ctx1, int(index < len(self._agent_dataset)), self._randomize(context)
