@@ -1,6 +1,7 @@
 import torch
 from hem.datasets import get_dataset
-from hem.models import get_model, Trainer
+from hem.models import get_model
+from hem.models.adversarial_trainer import AdversarialTrainer
 import torch.nn as nn
 import numpy as np
 import copy
@@ -53,7 +54,7 @@ class AgentClassifier(nn.Module):
 
 
 if __name__ == '__main__':
-    trainer = Trainer('traj_MoCo', "Trains Adversarial Trajectory MoCo on input data", comp_grad=False, drop_last=True)
+    trainer = AdversarialTrainer('traj_MoCo', "Trains Adversarial Trajectory MoCo on input data", drop_last=True)
     config = trainer.config
     
     # get MoCo params
@@ -64,7 +65,7 @@ if __name__ == '__main__':
 
     # build classifier module
     c = AgentClassifier(**config['classifier'])
-
+    
     # build main model
     model_class = get_model(config['model'].pop('type'))
     model = model_class(**config['model'])
@@ -78,7 +79,6 @@ if __name__ == '__main__':
     cross_entropy = torch.nn.CrossEntropyLoss()
 
     def train_forward(model, device, b1, l1, b2):
-        import pdb; pdb.set_trace()
         global moco_queue, moco_ptr, temperature, last_k
         if last_k is not None:
             moco_queue[:,moco_ptr:moco_ptr+b1.shape[0]] = last_k
@@ -98,18 +98,19 @@ if __name__ == '__main__':
         l_neg = torch.matmul(q, moco_queue)
         logits = torch.cat((l_pos, l_neg), 1) / temperature
 
-        loss_class = cross_entropy(pred_agent, l1)
+        loss_class = cross_entropy(pred_agent, l1.to(device))
         loss_embed = cross_entropy(logits, labels) - loss_class
 
+        class_acc = np.sum(np.argmax(pred_agent.detach().cpu().numpy(), 1) == l1.cpu().numpy()) / b1.shape[0]
         last_k = k.transpose(1, 0)
         top_k = torch.topk(logits, 5, dim=1)[1].cpu().numpy()
         acc_1 = np.sum(top_k[:,0] == 0) / b1.shape[0]
         acc_5 = np.sum([ar.any() for ar in top_k == 0]) / b1.shape[0]
-        return [loss_embed, loss_class], {'acc1': acc_1, 'acc5': acc_5}
+        return [loss_embed, loss_class], {'acc1': acc_1, 'acc5': acc_5, 'classifier_acc': class_acc}
     
     def val_forward(model, device, b1, l1, b2):
         global last_k, train_forward
         rets = train_forward(model, device, b1, l1, b2)
         last_k = None
         return rets
-    trainer.train(moco_model, train_forward, moco_model.wrapped_model, val_fn=val_forward)
+    trainer.train(moco_model, train_forward, moco_model.save_module, val_fn=val_forward)

@@ -119,7 +119,10 @@ class LabeledAgentTeacherDataset(PairedAgentTeacherDataset):
         self._rand_trans = np.array(rand_translate if rand_translate is not None else [0, 0])
         self._rand_gray = rand_gray
         self._normalize = normalize
-    
+
+    def __len__(self):
+        return len(self._agent_dataset) + len(self._teacher_dataset)
+
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
