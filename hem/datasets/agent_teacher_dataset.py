@@ -107,7 +107,7 @@ class PairedAgentTeacherDataset(Dataset):
 
 
 class LabeledAgentTeacherDataset(PairedAgentTeacherDataset):
-    def __init__(self, root_dir, color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, **params):
+    def __init__(self, root_dir, color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, ignore_actor=False, **params):
         self._agent_dataset = AgentDemonstrations(os.path.join(root_dir, 'traj*_robot.pkl'), normalize=False, **params)
         self._teacher_dataset = TeacherDemonstrations(os.path.join(root_dir, 'traj*_human.pkl'), normalize=False, **params)
 
@@ -119,8 +119,13 @@ class LabeledAgentTeacherDataset(PairedAgentTeacherDataset):
         self._rand_trans = np.array(rand_translate if rand_translate is not None else [0, 0])
         self._rand_gray = rand_gray
         self._normalize = normalize
+        self._ignore_actor = ignore_actor
 
     def __len__(self):
+        if self._ignore_actor == 'agent':
+            return len(self._teacher_dataset)
+        if self._ignore_actor == 'teacher':
+            return len(self._agent_dataset)
         return len(self._agent_dataset) + len(self._teacher_dataset)
 
     def __getitem__(self, index):
@@ -128,9 +133,14 @@ class LabeledAgentTeacherDataset(PairedAgentTeacherDataset):
             index = index.tolist()
         assert 0 <= index < len(self), "invalid index!"
 
-        if index < len(self._agent_dataset):
+        if self._ignore_actor == 'agent':
+            context = self._teacher_dataset[index]
+        elif self._ignore_actor == 'teacher':
             context = self._agent_dataset[index][1]
         else:
-            context = self._teacher_dataset[index - len(self._agent_dataset)]
+            if index < len(self._agent_dataset):
+                context = self._agent_dataset[index][1]
+            else:
+                context = self._teacher_dataset[index - len(self._agent_dataset)]
         ctx1 = self._randomize(context.copy())
         return ctx1, int(index < len(self._agent_dataset)), self._randomize(context)
