@@ -31,7 +31,7 @@ class _MoCoWrapper(nn.Module):
 
 
 if __name__ == '__main__':
-    trainer = Trainer('traj_MoCo', "Trains Trajectory MoCo on input data", comp_grad=False, drop_last=True)
+    trainer = Trainer('traj_MoCo', "Trains Trajectory MoCo on input data", drop_last=True)
     config = trainer.config
     
     # get MoCo params
