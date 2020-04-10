@@ -1,6 +1,5 @@
 import torch
 from hem.models import get_model, Trainer
-from hem.models.util import batch_inputs
 from hem.models.mdn_loss import MixtureDensityLoss, MixtureDensityTop
 import torch.nn as nn
 
@@ -19,26 +18,12 @@ class ImitationModule(nn.Module):
         # creates mixture density output
         self._mdn = MixtureDensityTop(**config['mdn'])
 
-        self._aux = False
-        if 'auxiliary' in config:
-            self._aux = True
-            hidden = config['auxiliary'].get('hidden_dim', 16)
-            l1 = nn.Linear(config['auxiliary']['in_dim'], hidden)
-            a1 = nn.ReLU(inplace=True)
-            l2 = nn.Linear(hidden, config['auxiliary']['out_dim'])
-            self._aux_linear = nn.Sequential(l1, a1, l2)
     
-    def forward(self, joints, images, depth=None):
+    def forward(self, states, images, depth=None):
         vis_embed = self._embed(images, depth)
-        ac_embed = torch.cat((vis_embed, joints), -1)
-        
-        if self._aux:
-            aux_pred = self._aux_linear(vis_embed)
-            state_embed = torch.cat((ac_embed, aux_pred.detach()), -1)
-            mean, sigma_inv, alpha = self._mdn(self._action_model(state_embed))
-            return mean, sigma_inv, alpha, aux_pred 
+        ac_embed = torch.cat((vis_embed, states), -1)
         mean, sigma_inv, alpha = self._mdn(self._action_model(ac_embed))
-        return mean, sigma_inv, alpha, None
+        return mean, sigma_inv, alpha
 
 
 if __name__ == '__main__':
@@ -49,23 +34,11 @@ if __name__ == '__main__':
     model = ImitationModule(config)
     loss = MixtureDensityLoss()
 
-    def forward(m, device, pairs, _):
-        states, actions = batch_inputs(pairs, device)
-        images = states['images'][:,:-1]
-        joints = states['joints']
-        depth = None
-        if 'depth' in states:
-            depth = states['depth'][:,:-1]
-
-        if config.get('output_pos', True):
-            actions = torch.cat((joints[:,1:,:7], actions[:,:,-1][:,:,None]), 2)
+    def forward(m, device, traj, _):
+        states, actions = traj['states'][:,:-1].to(device), traj['actions'].to(device)
+        images = traj['images'][:,:-1].to(device)
         
-        mean, sigma_inv, alpha, pred_state = m(joints[:,:-1], images, depth)
+        mean, sigma_inv, alpha = m(states, images)
         l_mdn = loss(actions, mean, sigma_inv, alpha)
-
-        if pred_state is not None:
-            state_loss = torch.mean(torch.sum((pred_state - joints[:,:-1,:7]) ** 2, (1, 2)))
-            stats = dict(mdn=l_mdn.item(), state=state_loss.item())
-            return l_mdn + config['auxiliary'].get('weight', 0.5) * state_loss, stats
         return l_mdn, {}
     trainer.train(model, forward)

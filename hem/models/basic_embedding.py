@@ -158,16 +158,16 @@ class VGGFeats(nn.Module):
         n0 = nn.InstanceNorm2d(64, affine=True)
         a0 = nn.ReLU(inplace=True)
 
-        cc1 = CoordConv(64, 128, 3, stride=2)
-        n1 = nn.InstanceNorm2d(128, affine=True)
+        cc1 = nn.Conv2d(64, 64, 3, 2, 1)
+        n1 = nn.InstanceNorm2d(64, affine=True)
         a1 = nn.ReLU(inplace=True)
         p1 = nn.MaxPool2d(2)
 
-        cc2_1 = CoordConv(128, 256, 3)
-        n2_1 = nn.InstanceNorm2d(256, affine=True)
+        cc2_1 = nn.Conv2d(64, 64, 3, 1, 1)
+        n2_1 = nn.InstanceNorm2d(64, affine=True)
         a2_1 = nn.ReLU(inplace=True)
-        cc2_2 = CoordConv(256, 256, 3)
-        n2_2 = nn.InstanceNorm2d(256, affine=True)
+        cc2_2 = nn.Conv2d(64, 64, 3, 1, 1)
+        n2_2 = nn.InstanceNorm2d(64, affine=True)
         a2_2 = nn.ReLU(inplace=True)
         p2 = nn.AdaptiveAvgPool2d(1)
 
@@ -176,7 +176,7 @@ class VGGFeats(nn.Module):
         self._v2 = nn.Sequential(*[cc1, n1, a1, p1, cc2_1, n2_1, a2_1, cc2_2, n2_2, a2_2, p2])
 
         self._out_dim = out_dim
-        linear = nn.Linear(256, out_dim)
+        linear = nn.Linear(64, out_dim)
         linear_ac = nn.ReLU(inplace=True)
         self._linear = nn.Sequential(linear, linear_ac)
 
@@ -197,7 +197,7 @@ class VGGFeats(nn.Module):
             visual_feats = self._v2(self._v1(visual_feats))
         else:
             visual_feats = self._v2(self._v1(self._vgg(x)))
-        visual_feats = visual_feats.reshape((visual_feats.shape[0], 256))
+        visual_feats = visual_feats.reshape((visual_feats.shape[0], 64))
         visual_feats = self._linear(visual_feats)
 
         if has_time:
