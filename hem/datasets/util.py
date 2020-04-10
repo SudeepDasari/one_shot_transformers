@@ -35,3 +35,41 @@ def crop(img, crop):
     if crop[3] > 0:
         img = img[:,:-crop[3]]
     return img
+
+
+def randomize_video(frames, color_jitter=None, rand_gray=None, rand_crop=None, rand_rot=0, rand_trans=np.array([0,0]), normalize=False):
+    np.random.seed()
+    frames = [fr for fr in frames]
+    
+    if color_jitter is not None:
+        rand_h, rand_s, rand_v = [np.random.uniform(-h, h) for h in color_jitter]
+        delta = np.array([rand_h * 180, rand_s, rand_v]).reshape((1, 1, 3)).astype(np.float32)
+        frames = [np.clip(cv2.cvtColor(cv2.cvtColor(fr, cv2.COLOR_RGB2HSV) + delta, cv2.COLOR_HSV2RGB), 0, 255) for fr in frames]
+    if rand_gray and np.random.uniform() < rand_gray:
+        frames = [np.tile(cv2.cvtColor(fr, cv2.COLOR_RGB2GRAY)[:,:,None], (1,1,3)) for fr in frames]
+    if rand_crop is not None:
+        r, c = [min(np.random.randint(p + 1), m-10) for p, m in zip(rand_crop, frames[0].shape[:2])]
+        if r:
+            pad_r = np.zeros((r, frames[0].shape[1], 3)).astype(frames[0].dtype)
+            if np.random.uniform() < 0.5:
+                frames = [np.concatenate((pad_r, fr[r:]), 0) for fr in frames]
+            else:
+                frames = [np.concatenate((fr[:-r], pad_r), 0) for fr in frames]
+        if c:                      
+            pad_c = np.zeros((frames[0].shape[0], c, 3)).astype(frames[0].dtype)
+            if np.random.uniform() < 0.5:
+                frames = [np.concatenate((pad_c, fr[:,c:]), 1) for fr in frames]
+            else:
+                frames = [np.concatenate((fr[:,:-c], pad_c), 1) for fr in frames]
+    if rand_rot or any(rand_trans):
+        rot = np.random.uniform(-rand_rot, rand_rot)
+        trans = np.random.uniform(-rand_trans, rand_trans)
+        M = np.array([[np.cos(rot), -np.sin(rot), trans[0]], [np.sin(rot), np.cos(rot), trans[1]]])
+        frames = [cv2.warpAffine(fr, M, (fr.shape[1], fr.shape[0])) for fr in frames]
+    if normalize:
+        frames = [(fr.astype(np.float32) / 255 - MEAN) / STD for fr in frames]
+    else:
+        for fr in frames:
+            fr /= 255
+    frames = np.concatenate([fr[None] for fr in frames], 0).astype(np.float32)
+    return frames
