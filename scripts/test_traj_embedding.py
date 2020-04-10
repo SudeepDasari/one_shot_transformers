@@ -17,11 +17,11 @@ def _test_files(test_folder, config):
     normalize = config.get('normalize', True)
     T = config.get('T_context', 15)
 
-    test_trajs = glob.glob(os.path.join(os.path.expanduser(test_folder), '*.pkl'))
+    test_trajs = glob.glob(os.path.expanduser(test_folder) +  '*.pkl')
     for traj in test_trajs:
         traj = pkl.load(open(traj, 'rb'))['traj']
         stride = int(len(traj) // T)
-        times = [0] + [t * stride + np.random.randint(stride) for t in range(1, T - 2)] + [len(traj) - 1]
+        times = [0] + [t * stride + np.random.randint(stride) for t in range(1, T - 1)] + [len(traj) - 1]
         imgs = [resize(crop(traj[t]['obs']['image'], crop_params), im_dims, normalize)[None] for t in times]
         imgs = np.transpose(np.concatenate(imgs, 0), (0, 3, 1, 2))[None]
         yield imgs.astype(np.float32)
@@ -77,6 +77,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', default='embed_test', type=str, help="where to save embed test visualization")
     parser.add_argument('--loader_workers', default=4, type=int, help="number of workers for dataset loader to use")
     parser.add_argument('--mode', default='val', type=str, help="dataloader mode to use to get source files")
+    parser.add_argument('--ignore_actor', default=False, type=str, help="tells source data loader to ignore particular agent")
     args = parser.parse_args()
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -88,6 +89,8 @@ if __name__ == '__main__':
 
     config_path = args.model_config if args.model_config else os.path.join(os.path.dirname(args.model_restore), 'config.yaml')
     config = parse_basic_config(config_path)['dataset']
+    if args.ignore_actor:
+        config['ignore_actor'] = args.ignore_actor
     [config.pop(c, None) for c in ('color_jitter', 'rand_gray', 'rand_crop', 'rand_rotate', 'rand_translate')]
     dataset = get_dataset(config.pop('type'))(**config, mode=args.mode)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.loader_workers, drop_last=True)
