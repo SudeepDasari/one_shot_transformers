@@ -39,12 +39,11 @@ if __name__ == '__main__':
     
     # build Imitation Module and MDN Loss
     model = ImitationModule(config)
-    loss = MixtureDensityLoss() if model.use_mdn else nn.SmoothL1Loss
+    loss = MixtureDensityLoss() if model.use_mdn else nn.SmoothL1Loss()
 
     def forward(m, device, traj, _):
         states, actions = traj['states'][:,:-1].to(device), traj['actions'].to(device)
-        images = traj['images'][:,:-1].to(device)
-        
+        images = traj['images'][:,:-1].to(device) 
         if model.use_mdn:
             mean, sigma_inv, alpha = m(states, images)
             max_alpha = np.argmax(alpha.detach().cpu().numpy(), 2)
