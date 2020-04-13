@@ -43,7 +43,8 @@ class MixtureDensitySampler:
         self._mdn_model = model
     
     def forward(self, inputs, n_samples=1):
-        mean, sigma_inv, alpha = self._mdn_model(*inputs)[:3]
+        with torch.no_grad():
+            mean, sigma_inv, alpha = self._mdn_model(*inputs)[:3]
         if len(alpha.shape) == 3:
             mean, sigma_inv, alpha = mean[:,-1], sigma_inv[:,-1], alpha[:,-1]
 

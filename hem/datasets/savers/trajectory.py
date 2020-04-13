@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import cv2
 import copy
+import numpy as np
 
 
 def _compress_obs(obs):
@@ -8,12 +9,20 @@ def _compress_obs(obs):
         okay, im_string = cv2.imencode('.jpg', obs['image'])
         assert okay, "image encoding failed!"
         obs['image'] = im_string
+    if 'depth' in obs:
+        assert len(obs['depth'].shape) == 2 and obs['depth'].dtype == np.uint8, "assumes uint8 greyscale depth image!"
+        depth_im = np.tile(obs['depth'][:,:,None], (1, 1, 3))
+        okay, depth_string = cv2.imencode('.jpg', depth_im)
+        assert okay, "depth encoding failed!"
+        obs['depth'] = depth_string
     return obs
 
 
 def _decompress_obs(obs):
     if 'image' in obs:
         obs['image'] = cv2.imdecode(obs['image'], cv2.IMREAD_COLOR)
+    if 'depth' in obs:
+        obs['depth'] = cv2.imdecode(obs['depth'], cv2.IMREAD_GRAYSCALE)
     return obs
 
 
