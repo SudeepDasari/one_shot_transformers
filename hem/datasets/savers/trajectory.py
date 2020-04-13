@@ -22,7 +22,7 @@ def _decompress_obs(obs):
     if 'image' in obs:
         obs['image'] = cv2.imdecode(obs['image'], cv2.IMREAD_COLOR)
     if 'depth' in obs:
-        obs['depth'] = cv2.imdecode(obs['depth'], cv2.IMREAD_GRAYSCALE)
+        obs['depth'] = cv2.imdecode(obs['depth'], cv2.IMREAD_GRAYSCALE).astype(np.float32) / 255
     return obs
 
 
