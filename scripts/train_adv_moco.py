@@ -45,6 +45,7 @@ class AgentClassifier(nn.Module):
         layers = []
         for p, n in zip(layer_def[:-1], layer_def[1:]):
             layers.append(nn.Linear(p, n))
+            layers.append(nn.BatchNorm1d(n))
             layers.append(nn.ReLU(inplace=True))
         layers.append(nn.Linear(layer_def[-1], n_agents))
         self._n = nn.Sequential(*layers)
@@ -99,14 +100,14 @@ if __name__ == '__main__':
         logits = torch.cat((l_pos, l_neg), 1) / temperature
 
         loss_class = cross_entropy(pred_agent, l1.to(device))
-        loss_embed = cross_entropy(logits, labels) - loss_class
+        loss_embed = cross_entropy(logits, labels) - config.get('c_lambda', 1) * loss_class
 
         class_acc = np.sum(np.argmax(pred_agent.detach().cpu().numpy(), 1) == l1.cpu().numpy()) / b1.shape[0]
         last_k = k.transpose(1, 0)
         top_k = torch.topk(logits, 5, dim=1)[1].cpu().numpy()
         acc_1 = np.sum(top_k[:,0] == 0) / b1.shape[0]
         acc_5 = np.sum([ar.any() for ar in top_k == 0]) / b1.shape[0]
-        return [loss_embed, loss_class], {'acc1': acc_1, 'acc5': acc_5, 'classifier_acc': class_acc}
+        return [loss_embed, loss_class], {'acc1': acc_1, 'acc5': acc_5, 'classifier_acc': class_acc, 'c_loss': loss_class.item()}
     
     def val_forward(model, device, b1, l1, b2):
         global last_k, train_forward

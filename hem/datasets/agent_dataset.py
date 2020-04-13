@@ -16,7 +16,7 @@ import tqdm
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
-                 T_pair=0, freq=1, mode='train', split=[0.9, 0.1], cache=False, state_action_spec=None,
+                 T_pair=0, freq=1, mode='train', split=[0.9, 0.1], cache=False, state_spec=None, action_spec=None,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
@@ -46,7 +46,9 @@ class AgentDemonstrations(Dataset):
         self._T_pair = T_pair
         self._freq = freq
         self._cache = {} if cache else None
-        self._state_action_spec = state_action_spec if state_action_spec is not None else (('ee_aa', 'ee_vel', 'joint_pos', 'joint_vel', 'gripper_qpos', 'object_detected'), ('ee_aa','gripper_qpos'))
+        state_spec = tuple(state_spec) if state_spec else ('ee_aa', 'ee_vel', 'joint_pos', 'joint_vel', 'gripper_qpos', 'object_detected')
+        action_spec = tuple(action_spec) if action_spec else ('ee_aa','gripper_qpos')
+        self._state_action_spec = (state_spec, action_spec)
         self._color_jitter = color_jitter
         self._rand_crop = rand_crop
         self._rand_rot = rand_rotate if rand_rotate is not None else 0
