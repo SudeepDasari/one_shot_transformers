@@ -41,6 +41,7 @@ class Trainer:
         shutil.copyfile(args.experiment_file, os.path.join(save_dir, 'config.yaml'))
         self._writer = SummaryWriter(log_dir=os.path.join(save_dir, 'log'))
         self._save_fname = os.path.join(save_dir, 'model_save')
+        self._step = None
 
     @property
     def config(self):
@@ -64,7 +65,7 @@ class Trainer:
         if val_fn is None:
             val_fn = train_fn
 
-        step = 0
+        self._step = 0
         train_stats = {'loss': 0}
         val_iter = iter(self._val_loader)
         vl_running_mean = None
@@ -72,10 +73,10 @@ class Trainer:
             for inputs in self._train_loader:
                 self._zero_grad(optimizer)
                 loss_i, stats_i = train_fn(model, self._device, *inputs)
-                self._step_optim(loss_i, step, optimizer)
+                self._step_optim(loss_i, self._step, optimizer)
                 
                 # calculate iter stats
-                mod_step = step % log_freq
+                mod_step = self._step % log_freq
                 train_stats['loss'] = (self._loss_to_scalar(loss_i) + mod_step * train_stats['loss']) / (mod_step + 1)
                 for k, v in stats_i.items():
                     if k not in train_stats:
@@ -98,24 +99,24 @@ class Trainer:
                         vl_running_mean = val_loss
                     vl_running_mean = val_loss * vlm_alpha + vl_running_mean * (1 - vlm_alpha)
 
-                    self._writer.add_scalar('loss/val', val_loss, step)
+                    self._writer.add_scalar('loss/val', val_loss, self._step)
                     for k, v in val_stats.items():
-                        self._writer.add_scalar('{}/val'.format(k), v, step)
+                        self._writer.add_scalar('{}/val'.format(k), v, self._step)
                     for k, v in train_stats.items():
-                        self._writer.add_scalar('{}/train'.format(k), v, step)
+                        self._writer.add_scalar('{}/train'.format(k), v, self._step)
                     self._writer.file_writer.flush()
-                    print('epoch {3}/{4}, step {0}: loss={1:.4f} \t val loss={2:.4f}'.format(step, train_stats['loss'], vl_running_mean, e, epochs))
+                    print('epoch {3}/{4}, step {0}: loss={1:.4f} \t val loss={2:.4f}'.format(self._step, train_stats['loss'], vl_running_mean, e, epochs))
                 else:
-                    print('step {0}: loss={1:.4f}'.format(step, train_stats['loss']), end='\r')
-                step += 1
+                    print('step {0}: loss={1:.4f}'.format(self._step, train_stats['loss']), end='\r')
+                self._step += 1
 
-                if step % save_freq == 0:
+                if self._step % save_freq == 0:
                     save_module = model
                     if weights_fn is not None:
                         save_module = weights_fn()
                     elif isinstance(model, nn.DataParallel):
                         save_module = model.module
-                    torch.save(save_module, self._save_fname + '-{}.pt'.format(step))
+                    torch.save(save_module, self._save_fname + '-{}.pt'.format(self._step))
             self._step_scheduler(scheduler, vl_running_mean)
 
     @property
@@ -158,3 +159,9 @@ class Trainer:
 
     def _loss_to_scalar(self, loss):
         return loss.item()
+
+    @property
+    def step(self):
+        if self._step is None:
+            raise Exception("Optimization has not begun!")
+        return self._step

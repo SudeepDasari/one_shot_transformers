@@ -100,7 +100,16 @@ if __name__ == '__main__':
         logits = torch.cat((l_pos, l_neg), 1) / temperature
 
         loss_class = cross_entropy(pred_agent, l1.to(device))
-        loss_embed = cross_entropy(logits, labels) - config.get('c_lambda', 1) * loss_class
+        c_lambda = 1
+        if 'c_lambda_schedule':
+            start, end, start_value, end_value = config['c_lambda_schedule']
+            if trainer.step < start:
+                c_lambda = start_value
+            elif trainer.step > end:
+                c_lambda = end_value
+            else:
+                c_lambda = (trainer.step - start) / (end - start) * (end_value - start_value) + start_value
+        loss_embed = cross_entropy(logits, labels) - c_lambda * loss_class
 
         class_acc = np.sum(np.argmax(pred_agent.detach().cpu().numpy(), 1) == l1.cpu().numpy()) / b1.shape[0]
         last_k = k.transpose(1, 0)
