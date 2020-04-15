@@ -108,7 +108,7 @@ if __name__ == '__main__':
             elif trainer.step > end:
                 c_lambda = end_value
             else:
-                c_lambda = (trainer.step - start) / (end - start) * (end_value - start_value) + start_value
+                c_lambda = float(trainer.step - start) / (end - start) * (end_value - start_value) + start_value
         loss_embed = cross_entropy(logits, labels) - c_lambda * loss_class
 
         class_acc = np.sum(np.argmax(pred_agent.detach().cpu().numpy(), 1) == l1.cpu().numpy()) / b1.shape[0]
@@ -116,8 +116,8 @@ if __name__ == '__main__':
         top_k = torch.topk(logits, 5, dim=1)[1].cpu().numpy()
         acc_1 = np.sum(top_k[:,0] == 0) / b1.shape[0]
         acc_5 = np.sum([ar.any() for ar in top_k == 0]) / b1.shape[0]
-        return [loss_embed, loss_class], {'acc1': acc_1, 'acc5': acc_5, 'classifier_acc': class_acc, 'c_loss': loss_class.item()}
-    
+        return [loss_embed, loss_class], {'acc1': acc_1, 'acc5': acc_5, 'classifier_acc': class_acc, 'c_loss': loss_class.item(), 'c_lambda': c_lambda}
+
     def val_forward(model, device, b1, l1, b2):
         global last_k, train_forward
         rets = train_forward(model, device, b1, l1, b2)
