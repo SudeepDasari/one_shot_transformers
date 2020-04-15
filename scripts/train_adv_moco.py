@@ -13,7 +13,7 @@ class _AdvMoCoWrapper(nn.Module):
         self._alpha = alpha
         self._mq = mq
         self._mk = mk
-        self._c = c
+        self._c = nn.ModuleList(c)
         for p_q, p_k in zip(mq.parameters(), mk.parameters()):
             p_k.data.mul_(0).add_(1, p_q.detach().data)
 
@@ -22,7 +22,7 @@ class _AdvMoCoWrapper(nn.Module):
         with torch.no_grad():
             k = self._mk(b2).detach()
         q = nn.functional.normalize(q, dim=1)
-        return q, nn.functional.normalize(k, dim=1), self._c(q)
+        return q, nn.functional.normalize(k, dim=1), [c(q) for c in self._c]
 
     def momentum_update(self):
         with torch.no_grad():
@@ -36,10 +36,7 @@ class _AdvMoCoWrapper(nn.Module):
         return self._mq.parameters()
     
     def p2_params(self):
-        params = []
-        for c in self._c:
-            params.extend(list(c.parameters()))
-        return params
+        return self._c.parameters()
 
 
 class AgentClassifier(nn.Module):
@@ -103,9 +100,9 @@ if __name__ == '__main__':
         l_neg = torch.matmul(q, moco_queue)
         logits = torch.cat((l_pos, l_neg), 1) / temperature
 
-        import pdb; pdb.set_trace()
         apply_loss_prob = config.get('apply_loss_prob', 1)
-        loss_class = torch.sum([np.random.choice(2, p=[1-apply_loss_prob, apply_loss_prob]) * cross_entropy(p, l1.to(device)) for p in pred_agent])
+        apply_masks = [np.random.choice(2, p=[1 - apply_loss_prob, apply_loss_prob]) for _ in range(len(pred_agent))]
+        loss_class = sum([m * cross_entropy(p, l1.to(device)) for m, p in zip(apply_masks, pred_agent)]) / max(1, sum(apply_masks))
         c_lambda = 1
         if 'c_lambda_schedule':
             start, end, start_value, end_value = config['c_lambda_schedule']
@@ -117,12 +114,14 @@ if __name__ == '__main__':
                 c_lambda = float(trainer.step - start) / (end - start) * (end_value - start_value) + start_value
         loss_embed = cross_entropy(logits, labels) - c_lambda * loss_class
 
-        class_acc = np.sum(np.argmax(pred_agent.detach().cpu().numpy(), 1) == l1.cpu().numpy()) / b1.shape[0]
         last_k = k.transpose(1, 0)
         top_k = torch.topk(logits, 5, dim=1)[1].cpu().numpy()
         acc_1 = np.sum(top_k[:,0] == 0) / b1.shape[0]
         acc_5 = np.sum([ar.any() for ar in top_k == 0]) / b1.shape[0]
-        return [loss_embed, loss_class], {'acc1': acc_1, 'acc5': acc_5, 'classifier_acc': class_acc, 'c_loss': loss_class.item(), 'c_lambda': c_lambda}
+        stats = dict(acc1=acc_1, acc5=acc_5, c_lambda=c_lambda, classifier_losses=loss_class.item())
+        for i, p in enumerate(pred_agent):
+            stats['classifier{}_acc'.format(i)] = np.sum(np.argmax(p.detach().cpu().numpy(), 1) == l1.cpu().numpy()) / b1.shape[0]
+        return [loss_embed, loss_class], stats
 
     def val_forward(model, device, b1, l1, b2):
         global last_k, train_forward
