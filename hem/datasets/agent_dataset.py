@@ -47,7 +47,7 @@ class AgentDemonstrations(Dataset):
         self._freq = freq
         self._cache = {} if cache else None
         state_spec = tuple(state_spec) if state_spec else ('ee_aa', 'ee_vel', 'joint_pos', 'joint_vel', 'gripper_qpos', 'object_detected')
-        action_spec = tuple(action_spec) if action_spec else ('ee_aa','gripper_qpos')
+        action_spec = tuple(action_spec) if action_spec else ('action',)
         self._state_action_spec = (state_spec, action_spec)
         self._color_jitter = color_jitter
         self._rand_crop = rand_crop
