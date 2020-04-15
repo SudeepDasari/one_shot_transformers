@@ -36,7 +36,10 @@ class _AdvMoCoWrapper(nn.Module):
         return self._mq.parameters()
     
     def p2_params(self):
-        return self._c.parameters()
+        params = []
+        for c in self._c:
+            params.extend(list(c.parameters()))
+        return params
 
 
 class AgentClassifier(nn.Module):
@@ -65,7 +68,8 @@ if __name__ == '__main__':
     assert 0 <= alpha <= 1, "alpha should be in [0,1]!"
 
     # build classifier module
-    c = AgentClassifier(**config['classifier'])
+    c = [AgentClassifier(**config['classifier']) for _ in range(config.get('n_classifiers', 1))]
+    assert 0 <= config.get('apply_loss_prob', 1.0) <= 1, "invalid probability supplied for apply_loss_prob!"
     
     # build main model
     model_class = get_model(config['model'].pop('type'))
@@ -99,7 +103,9 @@ if __name__ == '__main__':
         l_neg = torch.matmul(q, moco_queue)
         logits = torch.cat((l_pos, l_neg), 1) / temperature
 
-        loss_class = cross_entropy(pred_agent, l1.to(device))
+        import pdb; pdb.set_trace()
+        apply_loss_prob = config.get('apply_loss_prob', 1)
+        loss_class = torch.sum([np.random.choice(2, p=[1-apply_loss_prob, apply_loss_prob]) * cross_entropy(p, l1.to(device)) for p in pred_agent])
         c_lambda = 1
         if 'c_lambda_schedule':
             start, end, start_value, end_value = config['c_lambda_schedule']
