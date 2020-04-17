@@ -96,11 +96,10 @@ class AgentDemonstrations(Dataset):
                 img = np.concatenate((img, self._crop_and_resize(obs['depth'][:,:,None])), -1)
             return img[None]
 
-        frames = [_make_frame(0)]
-        for i in range(1, self._T_context - 1):
+        frames = []
+        for i in range(self._T_context):
             n = random.randint(clip(i * per_bracket), clip((i + 1) * per_bracket - 1))
             frames.append(_make_frame(n))
-        frames.append(_make_frame(len(traj) - 1))
         frames = np.concatenate(frames, 0)
         frames = randomize_video(frames, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)
         return np.transpose(frames, (0, 3, 1, 2))
