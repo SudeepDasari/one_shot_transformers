@@ -15,26 +15,27 @@ import tqdm
 
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
-    def __init__(self, root_dir, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
+    def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
                  T_pair=0, freq=1, mode='train', split=[0.9, 0.1], cache=False, state_spec=None, action_spec=None,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or T_pair > 0, "Must return (s,a) pairs or context!"
 
-        shuffle_rng = random.Random(SHUFFLE_RNG)
-        root_dir = os.path.expanduser(root_dir)
-        if 'pkl' not in root_dir:
-            root_dir = os.path.join(root_dir, '*.pkl')
-        all_files = sorted(glob.glob(root_dir))
-        shuffle_rng.shuffle(all_files)
-        
-        pivot = int(len(all_files) * split[0])
-        if mode == 'train':
-            files = all_files[:pivot]
-        else:
-            files = all_files[pivot:]
-        assert files
+        if files is None:
+            shuffle_rng = random.Random(SHUFFLE_RNG)
+            root_dir = os.path.expanduser(root_dir)
+            if 'pkl' not in root_dir:
+                root_dir = os.path.join(root_dir, '*.pkl')
+            all_files = sorted(glob.glob(root_dir))
+            shuffle_rng.shuffle(all_files)
+            
+            pivot = int(len(all_files) * split[0])
+            if mode == 'train':
+                files = all_files[:pivot]
+            else:
+                files = all_files[pivot:]
+            assert files
 
         self._files = files
         self._im_dims = (width, height)
@@ -87,8 +88,7 @@ class AgentDemonstrations(Dataset):
 
     def _make_context(self, traj):
         clip = lambda x : int(max(0, min(x, len(traj) - 1)))
-        per_bracket = len(traj) / self._T_context
-        
+        per_bracket = max(int(len(traj) / self._T_context), 1)
         def _make_frame(n):
             obs = traj.get(n)['obs']
             img = self._crop_and_resize(obs['image'])
@@ -98,7 +98,7 @@ class AgentDemonstrations(Dataset):
 
         frames = []
         for i in range(self._T_context):
-            n = random.randint(clip(i * per_bracket), clip((i + 1) * per_bracket - 1))
+            n = clip(np.random.randint(i * per_bracket, (i + 1) * per_bracket))
             frames.append(_make_frame(n))
         frames = np.concatenate(frames, 0)
         frames = randomize_video(frames, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)

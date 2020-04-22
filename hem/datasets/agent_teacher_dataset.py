@@ -1,11 +1,13 @@
 from torch.utils.data import Dataset
-from .agent_dataset import AgentDemonstrations
+from .agent_dataset import AgentDemonstrations, SHUFFLE_RNG
 from .teacher_dataset import TeacherDemonstrations
 import torch
 import os
 from hem.datasets.util import resize
 import numpy as np
 import cv2
+import glob
+import random
 
 
 class AgentTeacherDataset(Dataset):
@@ -30,11 +32,26 @@ class AgentTeacherDataset(Dataset):
 
 
 class PairedAgentTeacherDataset(Dataset):
-    def __init__(self, root_dir, pretend_unpaired=False, **params):
-        self._agent_dataset = AgentDemonstrations(os.path.join(root_dir, 'traj*_robot.pkl'), **params)
-        self._teacher_dataset = TeacherDemonstrations(os.path.join(root_dir, 'traj*_human.pkl'), **params)
-        assert pretend_unpaired or len(self._agent_dataset) == len(self._teacher_dataset), "Lengths must match if data is paired!"
+    def __init__(self, root_dir, pretend_unpaired=False, t_per_a=1, mode='train', split=[0.9, 0.1], **params):
+        assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
+        agent_files, teacher_files = sorted(glob.glob(os.path.join(root_dir, 'traj*_robot.pkl'))), sorted(glob.glob(os.path.join(root_dir, 'traj*_human.pkl')))
+        order = [i for i in range(len(agent_files))]
+        pivot = int(len(order) * split[0])
+        if mode == 'train':
+            order = order[:pivot]
+        else:
+            order = order[pivot:]
+        random.Random(SHUFFLE_RNG).shuffle(order)
+        agent_files = [agent_files[o] for o in order]
+        teacher_files = [teacher_files[o*t_per_a:(o+1)*t_per_a] for o in order]
+        teacher_files = [item for elems in teacher_files for item in elems]
+
+        self._agent_dataset = AgentDemonstrations(files=agent_files, **params)
+        self._teacher_dataset = TeacherDemonstrations(files=teacher_files, **params)
+        assert t_per_a > 0, "t_per_a cannot be negative!"
+        assert pretend_unpaired or len(self._agent_dataset) * t_per_a == len(self._teacher_dataset), "Lengths must match if data is paired!"
         self._pretend_unpaired = pretend_unpaired
+        self._t_per_a = t_per_a
 
     def __len__(self):
         if self._pretend_unpaired:
@@ -55,7 +72,8 @@ class PairedAgentTeacherDataset(Dataset):
         
         # pairs aren't returned, fix later for imitation learning?
         _, agent_context = self._agent_dataset[index]
-        teacher_context = self._teacher_dataset[index]
+        t_index = index * self._t_per_a + np.random.randint(self._t_per_a)
+        teacher_context = self._teacher_dataset[t_index]
         return teacher_context, agent_context
 
 
