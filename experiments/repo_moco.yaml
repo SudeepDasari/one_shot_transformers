@@ -1,9 +1,9 @@
-batch_size: 20
+batch_size: 10
 lr: 0.0001
-epochs: 200
+epochs: 2000
 loader_workers: 32
 save_freq: 5000
-moco_queue_size: 50
+moco_queue_size: 100
 log_freq: 50
 
 
@@ -11,7 +11,6 @@ dataset:
   type: "paired agent teacher"
   root_dir: ${REPO_DIR}
   T_pair: 0
-  T_context: 20
   crop: [0, 0, 30, 30]
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1
