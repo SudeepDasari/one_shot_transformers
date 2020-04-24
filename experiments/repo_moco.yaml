@@ -19,7 +19,6 @@ dataset:
   rand_translate: [10, 10]
   height: 240
   width: 320
-  t_per_a: 10
 
 model:
   type: "base traj"

@@ -20,8 +20,8 @@ def _test_files(test_folder, config):
     test_trajs = glob.glob(os.path.expanduser(test_folder) +  '*.pkl')
     for traj in test_trajs:
         traj = pkl.load(open(traj, 'rb'))['traj']
-        stride = int(len(traj) // T)
-        times = [0] + [t * stride + np.random.randint(stride) for t in range(1, T - 1)] + [len(traj) - 1]
+        stride = max(int(len(traj) // T), 1)
+        times = [0] + [max(min(t * stride + np.random.randint(stride), len(traj) - 1), 0) for t in range(1, T - 1)] + [len(traj) - 1]
         imgs = [resize(crop(traj[t]['obs']['image'], crop_params), im_dims, normalize)[None] for t in times]
         imgs = np.transpose(np.concatenate(imgs, 0), (0, 3, 1, 2))[None]
         yield imgs.astype(np.float32)
