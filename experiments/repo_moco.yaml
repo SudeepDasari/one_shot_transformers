@@ -11,7 +11,7 @@ dataset:
   type: "paired agent teacher"
   root_dir: ${REPO_DIR}
   T_pair: 0
-  T_context: 20
+  T_context: 15
   crop: [0, 0, 30, 30]
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1
@@ -20,7 +20,6 @@ dataset:
   rand_translate: [10, 10]
   height: 240
   width: 320
-  t_per_a: 10
 
 model:
   type: "base traj"

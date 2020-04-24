@@ -88,7 +88,7 @@ class AgentDemonstrations(Dataset):
 
     def _make_context(self, traj):
         clip = lambda x : int(max(0, min(x, len(traj) - 1)))
-        per_bracket = max(int(len(traj) / self._T_context), 1)
+        per_bracket = max(len(traj) / self._T_context, 1)
         def _make_frame(n):
             obs = traj.get(n)['obs']
             img = self._crop_and_resize(obs['image'])
@@ -98,7 +98,7 @@ class AgentDemonstrations(Dataset):
 
         frames = []
         for i in range(self._T_context):
-            n = clip(np.random.randint(i * per_bracket, (i + 1) * per_bracket))
+            n = clip(np.random.randint(int(i * per_bracket), int((i + 1) * per_bracket)))
             frames.append(_make_frame(n))
         frames = np.concatenate(frames, 0)
         frames = randomize_video(frames, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)
