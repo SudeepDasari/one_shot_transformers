@@ -67,24 +67,6 @@ class PairedFrameDataset(Dataset):
         self._cache = None
         if cache:
             self._cache = {}
-            print('caching agents...')
-            for a in tqdm.tqdm(self._agent_files):
-                traj = pkl.load(open(a, 'rb'))['traj']
-                cached = _CachedTraj(a, len(traj))
-                for i in range(5):
-                    cached.add(i, traj[i]['obs']['image'])
-                for i in range(max(len(traj) - 5, 0), len(traj)):
-                    cached.add(i, traj[i]['obs']['image'])
-                self._cache[a] = cached
-            print('caching teacher...')
-            for t in tqdm.tqdm(self._teacher_files):
-                traj = pkl.load(open(t, 'rb'))['traj']
-                cached = _CachedTraj(t, len(traj))
-                for i in range(max(int(len(traj) // 3), 5)):
-                    cached.add(i, traj[i]['obs']['image'])
-                for i in range(max(len(traj) - max(int(len(traj) // 12), 5), 0), len(traj)):
-                    cached.add(i, traj[i]['obs']['image'])
-                self._cache[t] = cached
 
     def __len__(self):
         return len(self._agent_files)
@@ -108,7 +90,12 @@ class PairedFrameDataset(Dataset):
             return self._cache[traj_file]
         
         traj = pkl.load(open(traj_file, 'rb'))['traj']
-        self._cache[traj_file] = _CachedTraj(traj_file, len(traj))
+        cached = _CachedTraj(traj_file, len(traj))
+        for i in range(int(len(traj) // 3)):
+            cached.add(i, traj[i]['obs']['image'])
+        for i in range(max(len(traj) - int(len(traj) // 3), 0), len(traj)):
+            cached.add(i, traj[i]['obs']['image'])
+        self._cache[traj_file] = cached
         return traj
 
     def _slice(self, traj, chosen_slice, is_teacher=False):
