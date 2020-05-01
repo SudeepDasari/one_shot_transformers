@@ -3,9 +3,7 @@ from .agent_dataset import AgentDemonstrations, SHUFFLE_RNG
 from .teacher_dataset import TeacherDemonstrations
 import torch
 import os
-from hem.datasets.util import resize
 import numpy as np
-import cv2
 import glob
 import random
 

@@ -17,6 +17,12 @@ def get_dataset(name):
     elif name == 'agent':
         from .agent_dataset import AgentDemonstrations
         return AgentDemonstrations
+    elif name == 'paired frames':
+        from .frame_datasets import PairedFrameDataset
+        return PairedFrameDataset
+    elif name == 'unpaired frames':
+        from .frame_datasets import UnpairedFrameDataset
+        return UnpairedFrameDataset
     raise NotImplementedError
 
 
