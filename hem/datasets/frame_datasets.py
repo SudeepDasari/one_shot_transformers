@@ -9,6 +9,7 @@ from hem.datasets.util import resize, crop, randomize_video
 import pickle as pkl
 import cv2
 import tqdm
+import multiprocessing
 
 
 class _CachedTraj:
@@ -35,7 +36,18 @@ class _CachedTraj:
         self.add(index, traj[index]['obs']['image'])
         return traj[index]
 
-    
+
+def _build_cache(traj_file):
+    print(traj_file)
+    traj = pkl.load(open(traj_file, 'rb'))['traj']
+    cache = _CachedTraj(traj_file, len(traj))
+    for i in range(max(1, int(len(traj) // 3))):
+        cache.add(i, traj[i]['obs']['image'])
+    for i in range(int(2 * len(traj) / 3.0), len(traj)):
+        cache.add(i, traj[i]['obs']['image'])
+    return cache
+
+
 class PairedFrameDataset(Dataset):
     def __init__(self, root_dir, mode='train', split=[0.9, 0.1], color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, crop=None, height=224, width=224, cache=None):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
@@ -67,6 +79,11 @@ class PairedFrameDataset(Dataset):
         self._cache = None
         if cache:
             self._cache = {}
+            jobs = self._agent_files + self._teacher_files
+            with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+                cache_objs = list(tqdm.tqdm(p.imap(_build_cache, jobs), total=len(jobs)))
+            for j, c in zip(jobs, cache_objs):
+                self._cache[j] = c
 
     def __len__(self):
         return len(self._agent_files)
