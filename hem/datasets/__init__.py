@@ -1,4 +1,6 @@
 from hem.datasets.savers.trajectory import Trajectory
+from hem.datasets.savers.hdf5_trajectory import HDF5Trajectory
+import pickle as pkl
 
 
 def get_dataset(name):
@@ -28,3 +30,13 @@ def get_dataset(name):
 
 def get_validation_batch(loader, batch_size=8):
     pass
+
+
+def load_traj(fname):
+    if '.pkl' in fname:
+        return pkl.load(open(fname, 'rb'))['traj']
+    elif '.hdf5' in fname:
+        traj = HDF5Trajectory()
+        traj.load(fname)
+        return traj
+    raise NotImplementedError
