@@ -38,7 +38,6 @@ class _CachedTraj:
 
 
 def _build_cache(traj_file):
-    print(traj_file)
     traj = pkl.load(open(traj_file, 'rb'))['traj']
     cache = _CachedTraj(traj_file, len(traj))
     for i in range(max(1, int(len(traj) // 3))):
