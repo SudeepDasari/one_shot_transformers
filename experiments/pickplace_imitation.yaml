@@ -12,10 +12,11 @@ dataset:
   depth: False
   T_context: 0
   T_pair: 15
-  freq: 10
+  freq: 1
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1
   rand_crop: [15, 15]
+  state_spec: ['ee_vel', 'joint_pos', 'joint_vel', 'gripper_qpos', 'object_detected']
 
 embedding:
   type: 'vgg'
@@ -23,7 +24,7 @@ embedding:
 
 action_model:
   type: "base rnn"
-  in_dim: 93
+  in_dim: 86
   n_layers: 3
   out_dim: 16
 
