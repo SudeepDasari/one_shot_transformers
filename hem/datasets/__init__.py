@@ -1,6 +1,8 @@
 from hem.datasets.savers.trajectory import Trajectory
 from hem.datasets.savers.hdf5_trajectory import HDF5Trajectory
 import pickle as pkl
+import glob
+import os
 
 
 def get_dataset(name):
@@ -40,3 +42,12 @@ def load_traj(fname):
         traj.load(fname)
         return traj
     raise NotImplementedError
+
+
+def get_files(root_dir):
+    root_dir = os.path.expanduser(root_dir)
+    if 'pkl' in root_dir or 'hdf5' in root_dir:
+        return sorted(glob.glob(root_dir))
+    pkl_files = glob.glob(root_dir + '*.pkl')
+    hdf5_files = glob.glob(root_dir + '*.hdf5')
+    return sorted(pkl_files + hdf5_files)
