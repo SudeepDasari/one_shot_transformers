@@ -5,14 +5,14 @@ loader_workers: 4
 
 dataset:
   type: "agent"
-  root_dir: ${ROBOT_DIR}
+  root_dir: ${ROBOT_DIR}/*_robot.pkl
   height: 224
   width: 224
   crop: [0, 120, 210, 70]
   depth: False
-  T_context: 0
+  T_context: 10
   T_pair: 15
-  freq: 1
+  freq: 5
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1
   rand_crop: [15, 15]
@@ -20,11 +20,11 @@ dataset:
 
 embedding:
   type: 'vgg'
-  depth: False
+  out_dim: 128
 
 action_model:
   type: "base rnn"
-  in_dim: 86
+  in_dim: 278
   n_layers: 3
   out_dim: 16
 

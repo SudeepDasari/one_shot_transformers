@@ -21,8 +21,11 @@ class ImitationModule(nn.Module):
         if self._use_mdn:
             self._mdn = MixtureDensityTop(**config['mdn'])
     
-    def forward(self, states, images, depth=None):
-        vis_embed = self._embed(images, depth)
+    def forward(self, states, images, context=None):
+        vis_embed = self._embed(images)
+        if context is not None:
+            context_embed = self._embed(context)
+            vis_embed = torch.cat((vis_embed, context_embed.repeat((1, vis_embed.shape[1], 1))), 2)
         ac_embed = torch.cat((vis_embed, states), -1)
         if self._use_mdn:
             return self._mdn(self._action_model(ac_embed))
@@ -41,13 +44,18 @@ if __name__ == '__main__':
     model = ImitationModule(config)
     loss = MixtureDensityLoss() if model.use_mdn else nn.SmoothL1Loss()
 
-    def forward(m, device, traj, _):
+    def forward(m, device, traj, context):
+        if len(context):
+            context = context[:,-1][:,None].to(device)
+        else:
+            context = None
+
         states, actions = traj['states'][:,:-1].to(device), traj['actions'].to(device)
         images = traj['images'][:,:-1].to(device) 
         if model.use_mdn:
-            mean, sigma_inv, alpha = m(states, images)
+            mean, sigma_inv, alpha = m(states, images, context)
             max_alpha = np.argmax(alpha.detach().cpu().numpy(), 2)
             tallest_mean = mean.detach().cpu().numpy()[np.arange(mean.shape[0]).reshape((-1, 1)), np.arange(mean.shape[1]).reshape((1, -1)), max_alpha]
             return loss(actions, mean, sigma_inv, alpha), {'ac_delta': np.mean(np.linalg.norm(tallest_mean - actions.cpu().numpy(), axis=2))}
-        return loss(actions, m(states, images)), {}
+        return loss(actions, m(states, images, context)), {}
     trainer.train(model, forward)
