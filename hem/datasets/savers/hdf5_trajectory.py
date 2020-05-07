@@ -4,26 +4,25 @@ import h5py
 
 
 class _HDF5BackedData:
-    def __init__(self, fname, length):
-        self._fname = fname
+    def __init__(self, hf, length):
+        self._hf = hf
         self._len = length
     
     def __len__(self):
         return self._len
     
     def __getitem__(self, index):
-        with h5py.File(self._fname, 'r') as hf:
-            group_t = hf[str(index)]
-            obs_t = {}
-            for k in group_t['obs'].keys():
-                obs_t[k] = group_t['obs'][k][:]
-            reward_t = group_t.get('reward', None)
-            done_t = group_t.get('done', None)
-            info_t = group_t.get('info', None)
-            action_t = None
-            if 'action' in group_t:
-                action_t=group_t.get('action')[:]
-            return obs_t, reward_t, done_t, info_t, action_t
+        group_t = self._hf[str(index)]
+        obs_t = {}
+        for k in group_t['obs'].keys():
+            obs_t[k] = group_t['obs'][k][:]
+        reward_t = group_t.get('reward', None)
+        done_t = group_t.get('done', None)
+        info_t = group_t.get('info', None)
+        action_t = None
+        if 'action' in group_t:
+            action_t=group_t.get('action')[:]
+        return obs_t, reward_t, done_t, info_t, action_t
 
 
 class HDF5Trajectory(Trajectory):
@@ -43,16 +42,16 @@ class HDF5Trajectory(Trajectory):
         raise NotImplementedError("Cannot Append to HDF5 backed trajectory!")
 
     def load(self, fname):
-        with h5py.File(fname, 'r') as hf:
-            self._config_str = hf.get('config_str', None)
-            self._raw_state = hf.get('raw_state', None)
+        hf = h5py.File(fname, 'r')
+        self._config_str = hf.get('config_str', None)
+        self._raw_state = hf.get('raw_state', None)
 
-            cntr = 0
-            while str(cntr) in hf:
-                cntr += 1
-            self._data = _HDF5BackedData(fname, cntr)
-            if self._raw_state is None:
-                self._raw_state = [None for _ in range(cntr)]
+        cntr = 0
+        while str(cntr) in hf:
+            cntr += 1
+        self._data = _HDF5BackedData(hf, cntr)
+        if self._raw_state is None:
+            self._raw_state = [None for _ in range(cntr)]
     
     def to_pkl_traj(self):
         traj = Trajectory()
