@@ -96,6 +96,10 @@ class ResNetFeats(nn.Module):
             out = out.reshape((B, T, self._out_dim))
         return out
 
+    @property
+    def dim(self):
+        return self._out_dim
+
 
 class CoordConv(nn.Module):
     def __init__(self, in_dim, out_dim, kernel_size, padding=1, stride=1):

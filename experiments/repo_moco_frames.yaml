@@ -1,9 +1,9 @@
-batch_size: 500
+batch_size: 256
 lr: 0.0001
 epochs: 2000
-loader_workers: 0
+loader_workers: 20
 save_freq: 5000
-moco_queue_size: 3000
+moco_queue_size: 3072
 log_freq: 50
 
 
