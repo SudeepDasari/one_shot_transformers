@@ -5,6 +5,7 @@ import numpy as np
 import cv2
 from hem.datasets.util import MEAN, STD, SAWYER_DEMO_PRIOR
 import copy
+import os
 
 
 class ImitationModule(nn.Module):
@@ -84,8 +85,13 @@ if __name__ == '__main__':
     config = trainer.config
     
     # build embedding model
+    restore = config['embedding'].pop('restore', '')
     embed = get_model(config['embedding'].pop('type'))
     embed = embed(**config['embedding'])
+    if restore:
+        restore_model = torch.load(os.path.expanduser(restore), map_location=torch.device('cpu'))
+        embed.load_state_dict(restore_model.state_dict(), strict=False)
+        del restore_model
 
     # build Imitation Module
     policy = ImitationModule(embed, config)

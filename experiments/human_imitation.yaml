@@ -18,6 +18,7 @@ dataset:
   action_spec: ['discretized_action']
 
 embedding:
+  restore: ${FEAT_PATH}
   type: 'resnet'
   output_raw: True
 
