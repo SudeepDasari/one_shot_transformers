@@ -3,10 +3,9 @@ from .agent_dataset import SHUFFLE_RNG
 import torch
 import os
 import numpy as np
-import glob
 import random
+from hem.datasets import get_files, load_traj
 from hem.datasets.util import resize, crop, randomize_video
-import pickle as pkl
 import cv2
 import tqdm
 import multiprocessing
@@ -32,13 +31,13 @@ class _CachedTraj:
 
         if index in self._img_cache:
             return {'obs': {'image':cv2.imdecode(self._img_cache[index], cv2.IMREAD_COLOR)}}
-        traj = pkl.load(open(self._file, 'rb'))['traj']
+        traj = load_traj(self._file)
         self.add(index, traj[index]['obs']['image'])
         return traj[index]
 
 
 def _build_cache(traj_file):
-    traj = pkl.load(open(traj_file, 'rb'))['traj']
+    traj = load_traj(traj_file)
     cache = _CachedTraj(traj_file, len(traj))
     for i in range(max(1, int(len(traj) // 3))):
         cache.add(i, traj[i]['obs']['image'])
@@ -48,9 +47,9 @@ def _build_cache(traj_file):
 
 
 class PairedFrameDataset(Dataset):
-    def __init__(self, root_dir, mode='train', split=[0.9, 0.1], color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, crop=None, height=224, width=224, cache=None):
+    def __init__(self, root_dir, mode='train', split=[0.9, 0.1], color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, crop=None, height=224, width=224, cache=None, teacher_first=False):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
-        agent_files, teacher_files = sorted(glob.glob(os.path.join(root_dir, 'traj*_robot.pkl'))), sorted(glob.glob(os.path.join(root_dir, 'traj*_human.pkl')))
+        agent_files, teacher_files = get_files(os.path.join(root_dir, 'traj*_robot')), get_files(os.path.join(root_dir, 'traj*_human'))
         assert len(agent_files) == len(teacher_files), "lengths don't match!"
 
         order = [i for i in range(len(agent_files))]
@@ -74,6 +73,7 @@ class PairedFrameDataset(Dataset):
         self._slices = 2
         self._crop = tuple(crop) if crop is not None else (0, 0, 0, 0)
         self._im_dims = (width, height)
+        self._teacher_first = teacher_first
 
         self._cache = None
         if cache:
@@ -95,17 +95,17 @@ class PairedFrameDataset(Dataset):
         agent, teacher = self._agent_files[index], self._teacher_files[index]
         chosen_slice = np.random.randint(self._slices)
         agent_fr, teacher_fr = self._format_img(self._slice(agent, chosen_slice)), self._format_img(self._slice(teacher, chosen_slice, True))
-        if np.random.uniform() < 0.5:
+        if np.random.uniform() < 0.5 and not self._teacher_first:
             return agent_fr, teacher_fr
         return teacher_fr, agent_fr
     
     def _load(self, traj_file):
         if self._cache is None:
-            return pkl.load(open(traj_file, 'rb'))['traj']
+            return load_traj(traj_file)
         if traj_file in self._cache:
             return self._cache[traj_file]
         
-        traj = pkl.load(open(traj_file, 'rb'))['traj']
+        traj = load_traj(traj_file)
         cached = _CachedTraj(traj_file, len(traj))
         for i in range(int(len(traj) // 3)):
             cached.add(i, traj[i]['obs']['image'])

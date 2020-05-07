@@ -1,10 +1,10 @@
 from torch.utils.data import Dataset
 from .agent_dataset import AgentDemonstrations, SHUFFLE_RNG
 from .teacher_dataset import TeacherDemonstrations
+from hem.datasets import get_files
 import torch
 import os
 import numpy as np
-import glob
 import random
 
 
@@ -32,7 +32,7 @@ class AgentTeacherDataset(Dataset):
 class PairedAgentTeacherDataset(Dataset):
     def __init__(self, root_dir, pretend_unpaired=False, t_per_a=1, mode='train', split=[0.9, 0.1], **params):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
-        agent_files, teacher_files = sorted(glob.glob(os.path.join(root_dir, 'traj*_robot.pkl'))), sorted(glob.glob(os.path.join(root_dir, 'traj*_human.pkl')))
+        agent_files, teacher_files = get_files(os.path.join(root_dir, 'traj*_robot')), get_files(os.path.join(root_dir, 'traj*_human'))
         order = [i for i in range(len(agent_files))]
         pivot = int(len(order) * split[0])
         if mode == 'train':
@@ -77,8 +77,8 @@ class PairedAgentTeacherDataset(Dataset):
 
 class LabeledAgentTeacherDataset(PairedAgentTeacherDataset):
     def __init__(self, root_dir, ignore_actor=False, **params):
-        self._agent_dataset = AgentDemonstrations(os.path.join(root_dir, 'traj*_robot.pkl'), **params)
-        self._teacher_dataset = TeacherDemonstrations(os.path.join(root_dir, 'traj*_human.pkl'), **params)
+        self._agent_dataset = AgentDemonstrations(os.path.join(root_dir, 'traj*_robot'), **params)
+        self._teacher_dataset = TeacherDemonstrations(os.path.join(root_dir, 'traj*_human'), **params)
         self._ignore_actor = ignore_actor
 
     def __len__(self):

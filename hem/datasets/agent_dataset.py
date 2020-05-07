@@ -1,7 +1,5 @@
 from torch.utils.data import Dataset
-import pickle as pkl
 import cv2
-import glob
 import random
 import os
 import torch
@@ -11,12 +9,13 @@ import random
 import numpy as np
 import io
 import tqdm
+from hem.datasets import get_files, load_traj
 
 
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
-                 T_pair=0, freq=1, mode='train', split=[0.9, 0.1], cache=False, state_spec=None, action_spec=None,
+                 T_pair=0, freq=1, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
@@ -24,10 +23,7 @@ class AgentDemonstrations(Dataset):
 
         if files is None:
             shuffle_rng = random.Random(SHUFFLE_RNG)
-            root_dir = os.path.expanduser(root_dir)
-            if 'pkl' not in root_dir:
-                root_dir = os.path.join(root_dir, '*.pkl')
-            all_files = sorted(glob.glob(root_dir))
+            all_files = get_files(root_dir)
             shuffle_rng.shuffle(all_files)
             
             pivot = int(len(all_files) * split[0])
@@ -46,7 +42,6 @@ class AgentDemonstrations(Dataset):
         self._T_context = T_context
         self._T_pair = T_pair
         self._freq = freq
-        self._cache = {} if cache else None
         state_spec = tuple(state_spec) if state_spec else ('ee_aa', 'ee_vel', 'joint_pos', 'joint_vel', 'gripper_qpos', 'object_detected')
         action_spec = tuple(action_spec) if action_spec else ('action',)
         self._state_action_spec = (state_spec, action_spec)
@@ -67,14 +62,7 @@ class AgentDemonstrations(Dataset):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
 
-        if self._cache is None:
-            traj = pkl.load(open(self._files[index], 'rb'))['traj']
-        else:
-            f_name = self._files[index]
-            if f_name not in self._cache:
-                with open(f_name, 'rb') as f:
-                    self._cache[f_name] = f.read()
-            traj = pkl.load(io.BytesIO(self._cache[f_name]))['traj']
+        traj = load_traj(self._files[index])
         return self._proc_traj(traj)
 
     def _proc_traj(self, traj):

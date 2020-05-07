@@ -20,4 +20,7 @@ def get_model(name):
     elif name == 'base traj':
         from .traj_embed import BaseTraj
         return BaseTraj
+    elif name == 'attention goal state':
+        from .traj_embed import AttentionGoalState
+        return AttentionGoalState
     raise NotImplementedError
