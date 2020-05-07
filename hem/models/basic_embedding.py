@@ -77,12 +77,14 @@ class BasicEmbeddingModel(nn.Module):
 
 
 class ResNetFeats(nn.Module):
-    def __init__(self, out_dim=256):
+    def __init__(self, out_dim=256, output_raw=False):
         super(ResNetFeats, self).__init__()
         resnet50 = models.resnet50(pretrained=True)
         self._features = nn.Sequential(*list(resnet50.children())[:-1])
-        self._out = nn.Sequential(nn.Linear(2048, out_dim), nn.ReLU(inplace=True), nn.Linear(out_dim, out_dim))
-        self._out_dim = out_dim
+        self._output_raw = output_raw
+        if not output_raw:
+            self._out = nn.Sequential(nn.Linear(2048, out_dim), nn.ReLU(inplace=True), nn.Linear(out_dim, out_dim))
+            self._out_dim = out_dim
     
     def forward(self, x, depth=None):
         reshaped = False
@@ -90,10 +92,11 @@ class ResNetFeats(nn.Module):
             reshaped = True
             B, T, C, H, W = x.shape
             x = x.reshape((B * T, C, H, W))
-
-        out = self._out(self._features(x)[:,:,0,0])
+        out = self._features(x)[:,:,0,0]
         if reshaped:
-            out = out.reshape((B, T, self._out_dim))
+            out = out.reshape((B, T, 2048))
+        if not self._output_raw:
+            return self._out(out)
         return out
 
 

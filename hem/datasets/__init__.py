@@ -27,6 +27,9 @@ def get_dataset(name):
     elif name == 'unpaired frames':
         from .frame_datasets import UnpairedFrameDataset
         return UnpairedFrameDataset
+    elif name == 'imitation':
+        from .imitation_dataset import ImitationDataset
+        return ImitationDataset
     raise NotImplementedError
 
 

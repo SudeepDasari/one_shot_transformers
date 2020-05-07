@@ -1,0 +1,35 @@
+batch_size: 6
+lr: 0.001
+epochs: 2000
+loader_workers: 8
+
+dataset:
+  type: "imitation"
+  root_dir: ${REPO_DIR}
+  height: 170
+  width: 226
+  T_context: 5
+  T_pair: 10
+  freq: 1
+  # color_jitter: [0.33, 0.4, 0.4]
+  # rand_gray: 0.1
+  # rand_crop: [15, 15]
+  state_spec: ['ee_aa', 'ee_vel', 'gripper_qpos', 'object_detected']
+  action_spec: ['discretized_action']
+
+embedding:
+  type: 'resnet'
+  output_raw: True
+
+goal_state:
+  type: attention goal state
+  T: 5
+
+policy:
+  pos_enc: [10, 10, 10, 4, 4, 4, 4, 10, 10, 10, 4, 4, 4, 4, 0]
+  ac_bins: [5,5,5,5,5,5,5,2]
+  prior: sawyer_demos
+  action_stack_len: 3
+  state_dim: 217
+  goal_dim: 32
+  lstm_out: 64
