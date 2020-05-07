@@ -11,6 +11,7 @@ import torch.nn as nn
 import os
 import shutil
 import copy
+import yaml
 
 
 class Trainer:
@@ -38,7 +39,8 @@ class Trainer:
         save_dir = os.path.join(self._config.get('save_path', './'), '{}_ckpt-{}-{}_{}-{}-{}'.format(save_name, now.hour, now.minute, now.day, now.month, now.year))
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-        shutil.copyfile(args.experiment_file, os.path.join(save_dir, 'config.yaml'))
+        with open(os.path.join(save_dir, 'config.yaml'), 'w') as f:
+            yaml.dump(self._config, f, default_flow_style=False)
         self._writer = SummaryWriter(log_dir=os.path.join(save_dir, 'log'))
         self._save_fname = os.path.join(save_dir, 'model_save')
         self._step = None
