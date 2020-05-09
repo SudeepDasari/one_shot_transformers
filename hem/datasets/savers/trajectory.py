@@ -52,12 +52,13 @@ class Trajectory:
     def __getitem__(self, t):
         return self.get(t)
 
-    def get(self, t):
+    def get(self, t, decompress=True):
         assert isinstance(t, int), "t should be an integer value!"
         assert 0 <= t < self.T, "index should be in [0, T)"
         
         obs_t, reward_t, done_t, info_t, action_t = copy.deepcopy(self._data[t])
-        obs_t = _decompress_obs(obs_t)
+        if decompress:
+            obs_t = _decompress_obs(obs_t)
         ret_dict = dict(obs=obs_t, reward=reward_t, done=done_t, info=info_t, action=action_t)
 
         for k in list(ret_dict.keys()):

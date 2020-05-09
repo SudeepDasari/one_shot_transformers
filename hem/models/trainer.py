@@ -12,6 +12,7 @@ import os
 import shutil
 import copy
 import yaml
+from hem.models.lr_scheduler import build_scheduler
 
 
 class Trainer:
@@ -119,7 +120,7 @@ class Trainer:
                     elif isinstance(model, nn.DataParallel):
                         save_module = model.module
                     torch.save(save_module, self._save_fname + '-{}.pt'.format(self._step))
-            self._step_scheduler(scheduler, vl_running_mean)
+            scheduler.step(val_loss=vl_running_mean)
 
     @property
     def device_count(self):
@@ -139,25 +140,14 @@ class Trainer:
 
     def _build_optimizer_and_scheduler(self, model):
         optimizer = torch.optim.Adam(model.parameters(), self._config['lr'])
-        lr_schedule = self._config.get('lr_schedule', None)
-        if lr_schedule == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
-        elif lr_schedule is None:
-            scheduler = None
-        else:
-            raise NotImplementedError
-        return optimizer, scheduler
-    
+        return optimizer, build_scheduler(optimizer, self._config.get('lr_schedule', {}))
+
     def _step_optim(self, loss, step, optimizer):
         loss.backward()
         optimizer.step()
 
     def _zero_grad(self, optimizer):
         optimizer.zero_grad()
-
-    def _step_scheduler(self, scheduler, vl):
-        if scheduler is not None:
-            scheduler.step(vl)
 
     def _loss_to_scalar(self, loss):
         return loss.item()

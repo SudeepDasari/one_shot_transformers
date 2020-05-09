@@ -38,8 +38,8 @@ class ImitationDataset(Dataset):
         if torch.is_tensor(index):
             index = index.tolist()
         agent_traj = self._agent_dataset.get_traj(index)
-        obj_detected = np.concatenate([agent_traj[t]['obs']['object_detected'] for t in range(len(agent_traj))])
-        qpos = np.concatenate([agent_traj[t]['obs']['gripper_qpos'] for t in range(len(agent_traj))])
+        obj_detected = np.concatenate([agent_traj.get(t, False)['obs']['object_detected'] for t in range(len(agent_traj))])
+        qpos = np.concatenate([agent_traj.get(t, False)['obs']['gripper_qpos'] for t in range(len(agent_traj))])
         if obj_detected.any():
             grip = int(np.argmax(obj_detected))
             drop = min(len(agent_traj) - 1, int(len(agent_traj) - np.argmax(obj_detected[::-1])))
