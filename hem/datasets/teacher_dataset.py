@@ -4,7 +4,7 @@ import random
 
 
 class TeacherDemonstrations(AgentDemonstrations):
-    def _proc_traj(self, traj):
+    def proc_traj(self, traj):
         return self._make_context(traj)
 
 

@@ -61,11 +61,12 @@ class AgentDemonstrations(Dataset):
         if torch.is_tensor(index):
             index = index.tolist()
         assert 0 <= index < len(self._files), "invalid index!"
+        return self.proc_traj(self.get_traj(index))
+    
+    def get_traj(self, index):
+        return load_traj(self._files[index])
 
-        traj = load_traj(self._files[index])
-        return self._proc_traj(traj)
-
-    def _proc_traj(self, traj):
+    def proc_traj(self, traj):
         context_frames = []
         if self._T_context:
             context_frames = self._make_context(traj)

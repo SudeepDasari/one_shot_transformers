@@ -37,7 +37,20 @@ class ImitationDataset(Dataset):
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
+        agent_traj = self._agent_dataset.get_traj(index)
+        obj_detected = np.concatenate([agent_traj[t]['obs']['object_detected'] for t in range(len(agent_traj))])
+        qpos = np.concatenate([agent_traj[t]['obs']['gripper_qpos'] for t in range(len(agent_traj))])
+        if obj_detected.any():
+            grip = int(np.argmax(obj_detected))
+            drop = min(len(agent_traj) - 1, int(len(agent_traj) - np.argmax(obj_detected[::-1])))
+        else:
+            closed = np.isclose(qpos, 0)
+            grip = int(np.argmax(closed))
+            drop = min(len(agent_traj) - 1, int(len(agent_traj) - np.argmax(closed[::-1])))
+        grip = np.concatenate((agent_traj[grip]['obs']['ee_pos'][:3], agent_traj[grip]['obs']['axis_angle'])).astype(np.float32)
+        drop = np.concatenate((agent_traj[drop]['obs']['ee_pos'][:3], agent_traj[drop]['obs']['axis_angle'])).astype(np.float32)
 
-        agent_pairs, _ = self._agent_dataset[index]
+        agent_pairs, _ = self._agent_dataset.proc_traj(agent_traj)
+        agent_pairs['grip_location'], agent_pairs['drop_location'] = grip, drop
         teacher_context = self._teacher_dataset[index]
         return teacher_context, agent_pairs
