@@ -1,7 +1,7 @@
-batch_size: 16
+batch_size: 48
 lr: 0.001
 epochs: 2000
-loader_workers: 8
+loader_workers: 16
 
 dataset:
   type: "imitation"
@@ -9,7 +9,7 @@ dataset:
   height: 240
   width: 320
   T_context: 5
-  T_pair: 20
+  T_pair: 1
   freq: 1
   # color_jitter: [0.33, 0.4, 0.4]
   # rand_gray: 0.1
@@ -36,3 +36,4 @@ policy:
   state_dim: 249
   goal_dim: 64
   ac_out: 64
+  lstm: False
