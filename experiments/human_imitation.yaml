@@ -1,7 +1,7 @@
-batch_size: 6
+batch_size: 24
 lr: 0.001
 epochs: 2000
-loader_workers: 8
+loader_workers: 32
 
 dataset:
   type: "imitation"

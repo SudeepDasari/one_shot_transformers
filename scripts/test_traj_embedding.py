@@ -31,7 +31,7 @@ def test_traj_embedding(model, device, source_loader, test_data, save_dir):
     embeds, imgs = [], []
     for b in tqdm.tqdm(source_loader):
         if isinstance(b, (tuple, list)):
-            b = b[0]
+            b = b[1]
         with torch.no_grad():
             embeds.append(torch.nn.functional.normalize(model(b.to(device)), dim=1).detach().cpu().numpy())
         vid = np.transpose(b.cpu().numpy(), (0, 1, 3, 4, 2)) * STD[None][None] + MEAN[None][None]

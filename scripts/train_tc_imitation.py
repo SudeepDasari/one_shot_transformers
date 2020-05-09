@@ -99,12 +99,12 @@ if __name__ == '__main__':
 
     # build loss function
     cross_entropy = nn.CrossEntropyLoss()
-    def forward(m, device, context, traj):
+    def forward(pi, device, context, traj):
         context = context.to(device)
         states, images = traj['states'][:,:-1].to(device), traj['images'][:,:-1].to(device)
         actions = traj['actions'].type(torch.long).to(device)
 
-        action_logits = policy(context, images, states)
+        action_logits = pi(context, images, states)
         
         loss, stats = 0, {}
         for d, logits in enumerate(action_logits):
