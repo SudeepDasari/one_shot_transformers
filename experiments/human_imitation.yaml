@@ -1,13 +1,17 @@
 batch_size: 16
 lr: 0.001
 epochs: 2000
-loader_workers: 8
+loader_workers: 48
+
+lr_schedule:
+  type: ExponentialDecay
+  rate: 0.95
 
 dataset:
   type: "imitation"
   root_dir: ${REPO_DIR}
-  height: 240
-  width: 320
+  height: 170
+  width: 226
   T_context: 5
   T_pair: 20
   freq: 1
