@@ -92,7 +92,7 @@ class ImitationModule(nn.Module):
 
 
 if __name__ == '__main__':
-    trainer = Trainer('bc', "Trains Behavior Clone model on input data", drop_last=True)
+    trainer = Trainer('bc_tc', "Trains Behavior Clone model on input data", drop_last=True)
     config = trainer.config
     
     # build embedding model
