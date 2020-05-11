@@ -11,15 +11,15 @@ dataset:
   T_context: 5
   T_pair: 20
   freq: 1
-  # color_jitter: [0.33, 0.4, 0.4]
-  # rand_gray: 0.1
-  # rand_crop: [15, 15]
+  before_grip: True
+  color_jitter: [0.33, 0.4, 0.4]
+  rand_gray: 0.1
+  rand_crop: [10, 10]
   state_spec: ['ee_aa', 'ee_vel', 'gripper_qpos', 'object_detected']
   action_spec: ['discretized_action']
 
 embedding:
   restore: ${FEAT_PATH}
-  freeze: True
   type: 'resnet'
   output_raw: True
 

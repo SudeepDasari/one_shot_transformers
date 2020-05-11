@@ -9,7 +9,7 @@ log_freq: 50
 
 dataset:
   type: "paired frames"
-  cache: True
+  #  cache: True
   root_dir: ${REPO_DIR}
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1

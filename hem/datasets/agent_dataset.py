@@ -93,7 +93,7 @@ class AgentDemonstrations(Dataset):
         frames = randomize_video(frames, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)
         return np.transpose(frames, (0, 3, 1, 2))
 
-    def _get_pairs(self, traj):
+    def _get_pairs(self, traj, end=None):
         def _get_tensor(k, t):
             if k == 'action':
                 return t['action']
@@ -107,7 +107,9 @@ class AgentDemonstrations(Dataset):
         
         state_keys, action_keys = self._state_action_spec
         ret_dict = {'images': [], 'states': [], 'actions': []}
-        i = random.randint(0, len(traj) - self._T_pair * self._freq - 1)
+        if end is None:
+            end = len(traj)
+        i = np.random.randint(0, max(1, end - self._T_pair * self._freq))
         for j in range(self._T_pair + 1):
             t = traj.get(j * self._freq + i)
 
@@ -128,8 +130,8 @@ class AgentDemonstrations(Dataset):
         ret_dict['images'] = np.transpose(ret_dict['images'], (0, 3, 1, 2))
         return ret_dict
     
-    def _crop_and_resize(self, img):
-        return resize(crop(img, self._crop), self._im_dims, False)
+    def _crop_and_resize(self, img, normalize=False):
+        return resize(crop(img, self._crop), self._im_dims, normalize)
 
 
 if __name__ == '__main__':

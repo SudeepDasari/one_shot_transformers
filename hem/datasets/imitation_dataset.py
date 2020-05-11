@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 from .agent_dataset import AgentDemonstrations, SHUFFLE_RNG
 from .teacher_dataset import TeacherDemonstrations
 from hem.datasets import get_files
+from hem.datasets.util import randomize_video
 import torch
 import os
 import numpy as np
@@ -15,7 +16,7 @@ class _AgentDatasetNoContext(AgentDemonstrations):
 
 
 class ImitationDataset(Dataset):
-    def __init__(self, root_dir, mode='train', split=[0.9, 0.1], **params):
+    def __init__(self, root_dir, mode='train', split=[0.9, 0.1], before_grip=False, **params):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         agent_files, teacher_files = get_files(os.path.join(root_dir, 'traj*_robot')), get_files(os.path.join(root_dir, 'traj*_human'))
         order = [i for i in range(len(agent_files))]
@@ -30,6 +31,7 @@ class ImitationDataset(Dataset):
         assert len(teacher_files) == len(agent_files), "length of teacher files must match agent files!"
         self._teacher_dataset = TeacherDemonstrations(files=teacher_files, **params)
         self._agent_dataset = _AgentDatasetNoContext(files=agent_files, **params)
+        self._before_grip = before_grip
 
     def __len__(self):
         return len(self._agent_dataset)
@@ -41,16 +43,20 @@ class ImitationDataset(Dataset):
         obj_detected = np.concatenate([agent_traj.get(t, False)['obs']['object_detected'] for t in range(len(agent_traj))])
         qpos = np.concatenate([agent_traj.get(t, False)['obs']['gripper_qpos'] for t in range(len(agent_traj))])
         if obj_detected.any():
-            grip = int(np.argmax(obj_detected))
-            drop = min(len(agent_traj) - 1, int(len(agent_traj) - np.argmax(obj_detected[::-1])))
+            grip_t = int(np.argmax(obj_detected))
+            drop_t = min(len(agent_traj) - 1, int(len(agent_traj) - np.argmax(obj_detected[::-1])))
         else:
             closed = np.isclose(qpos, 0)
-            grip = int(np.argmax(closed))
-            drop = min(len(agent_traj) - 1, int(len(agent_traj) - np.argmax(closed[::-1])))
-        grip = np.concatenate((agent_traj[grip]['obs']['ee_pos'][:3], agent_traj[grip]['obs']['axis_angle'])).astype(np.float32)
-        drop = np.concatenate((agent_traj[drop]['obs']['ee_pos'][:3], agent_traj[drop]['obs']['axis_angle'])).astype(np.float32)
+            grip_t = int(np.argmax(closed))
+            drop_t = min(len(agent_traj) - 1, int(len(agent_traj) - np.argmax(closed[::-1])))
+        grip, drop = agent_traj.get(grip_t, False), agent_traj.get(drop_t, False)
+        grip = np.concatenate((grip['obs']['ee_pos'][:3], grip['obs']['axis_angle'])).astype(np.float32)
+        drop = np.concatenate((drop['obs']['ee_pos'][:3], drop['obs']['axis_angle'])).astype(np.float32)
 
-        agent_pairs, _ = self._agent_dataset.proc_traj(agent_traj)
+        if self._before_grip:
+            agent_pairs = self._agent_dataset._get_pairs(agent_traj, grip_t)
+        else:
+            agent_pairs, _ = self._agent_dataset.proc_traj(agent_traj)
         agent_pairs['grip_location'], agent_pairs['drop_location'] = grip, drop
         teacher_context = self._teacher_dataset[index]
         return teacher_context, agent_pairs
