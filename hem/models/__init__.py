@@ -23,4 +23,7 @@ def get_model(name):
     elif name == 'attention goal state':
         from .traj_embed import AttentionGoalState
         return AttentionGoalState
+    elif name == 'goal state':
+        from .traj_embed import GoalState
+        return GoalState
     raise NotImplementedError

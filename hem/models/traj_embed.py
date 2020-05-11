@@ -79,3 +79,36 @@ class AttentionGoalState(nn.Module):
         state_goal_attn = self._dpt2(self._ac(self._l1(state_goal_attn))) + frame
         state_goal_attn = self._n2(self._out(state_goal_attn))
         return goal_embed, state_goal_attn
+
+
+class GoalState(nn.Module):
+    def __init__(self, in_dim=2048, hidden=[256, 128], out_dim=64, T=5):
+        super().__init__()
+        goal_module = []
+        last_in = in_dim
+        for  d in hidden + [out_dim]:
+            l, a, n = nn.Linear(last_in, d), nn.ReLU(inplace=True), nn.BatchNorm1d(d)
+            goal_module.extend([l, a, n])
+            last_in = d
+        self._goal_module = nn.ModuleList(goal_module)
+        self._goal_conv = nn.Conv1d(out_dim, out_dim, T)
+
+        state_module = []
+        last_in = in_dim
+        for  d in hidden + [out_dim]:
+            l, a, n = nn.Linear(last_in, d), nn.ReLU(inplace=True), nn.BatchNorm1d(d)
+            state_module.extend([l, a, n])
+            last_in = d
+        self._state_module = nn.ModuleList(state_module)
+
+    def forward(self, context, frame):
+        ctx_embeds = self._apply_module(self._goal_module, context)
+        ctx_embeds = F.relu(torch.mean(self._goal_conv(ctx_embeds.transpose(1, 2)), dim=-1))
+        return ctx_embeds, self._apply_module(self._state_module, frame)
+    
+    def _apply_module(self, module, embeds):
+        embeds = embeds
+        for l in range(int(len(module) / 3)):
+            l, a, n = module[3*l:3*l + 3]
+            embeds = n(a(l(embeds)).transpose(1, 2)).transpose(1, 2)
+        return embeds

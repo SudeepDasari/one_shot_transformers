@@ -24,26 +24,23 @@ class ImitationModule(nn.Module):
 
         self._pe = config['policy']['pos_enc']
         self._embed = embed
-        self._goal_state = get_model(config['goal_state'].pop('type'))
-        self._goal_state = self._goal_state(**config['goal_state'])
+        self._goal_state_embed = get_model(config['goal_state'].pop('type'))
+        self._goal_state_embed = self._goal_state_embed(**config['goal_state'])
 
-        self._stack_len = config['policy']['action_stack_len']
-        goal_module, goal_dim = [], config['policy']['goal_dim']
-        for _ in range(self._stack_len):
-            goal_module.extend([nn.Linear(goal_dim, goal_dim), nn.ReLU(inplace=True), nn.BatchNorm1d(goal_dim)])
-        self._goal_module = nn.ModuleList(goal_module)
-
-        state_module, state_dim = [], config['policy']['state_dim']
-        for _ in range(self._stack_len):
-            state_module.extend([nn.Linear(state_dim, state_dim), nn.ReLU(inplace=True), nn.LayerNorm(state_dim)])
-        self._state_module = nn.ModuleList(state_module)
-
+        self._in_dim = config['policy']['state_dim'] + config['policy']['goal_dim']
+        # state goal stack
+        self._stack_len = config['policy'].get('sg_stack', 0)
+        if self._stack_len:
+            sg_stack = []
+            for _ in range(self._stack_len):
+                sg_stack.extend([nn.Linear(self._in_dim, self._in_dim), nn.ReLU(inplace=True)])
+            self._sg_stack = nn.Sequential(*sg_stack)
         # Action Processing
         self._is_lstm = config['policy'].get('lstm', True)
         if self._is_lstm:
-            self._ac_proc = nn.LSTM(state_dim + goal_dim, config['policy']['ac_out'], batch_first=True)
+            self._ac_proc = nn.LSTM(self._in_dim, config['policy']['ac_out'], batch_first=True)
         else:
-            linear, ac = nn.Linear(state_dim + goal_dim, config['policy']['ac_out']), nn.ReLU(inplace=True)
+            linear, ac = nn.Linear(self._in_dim, config['policy']['ac_out']), nn.ReLU(inplace=True)
             self._ac_proc = nn.Sequential(linear, ac)
         
         self._discrete_actions = config['policy']['discrete_actions']
@@ -51,24 +48,14 @@ class ImitationModule(nn.Module):
             self._ac_bins = config['policy']['ac_bins']
             self._to_logits = nn.Linear(config['policy']['ac_out'], sum(config['policy']['ac_bins']))
         else:
-            raise NotImplementedError
+            self._pred_acs = nn.Linear(config['policy']['ac_out'], config['policy']['adim'])
     
     def forward(self, context, images, state):
         context_embed, img_embed = F.normalize(self._embed(context), dim=-1), F.normalize(self._embed(images), dim=-1)
-        goal, img_state = self._goal_state(context_embed, img_embed)
-        state = torch.cat((self.pe(state), img_state), 2)
-
-        for l in range(self._stack_len):
-            # goal process
-            layer, ac, norm = [self._goal_module[3 * l + i] for i in range(3)]
-            goal = norm(ac(layer(goal)) + goal)
-
-            # state process
-            layer, ac, norm = [self._state_module[3 * l + i] for i in range(3)]
-            state = norm(ac(layer(state)) + state)
-
-        goal = goal[:, None].repeat((1, state.shape[1], 1))
-        state_goal = torch.cat((state, goal), 2)
+        goal, img_state = self._goal_state_embed(context_embed, img_embed)
+        state_goal = torch.cat((self.pe(state), img_state, goal[:, None]), 2)
+        if self._stack_len:
+            state_goal = self._sg_stack(state_goal)
         return self._predict_actions(state_goal)
 
     def _predict_actions(self, state_goal):
@@ -85,7 +72,8 @@ class ImitationModule(nn.Module):
                 ac_logits.append(bins[:,:,:a])
                 bins = bins[:,:,a:]
             return ac_logits
-        
+        else:
+            return self._pred_acs(ac_proc)        
 
     def pe(self, state):
         st = []
@@ -127,17 +115,22 @@ if __name__ == '__main__':
     def forward(pi, device, context, traj):
         context = context.to(device)
         states, images = traj['states'][:,:-1].to(device), traj['images'][:,:-1].to(device)
-        actions = traj['actions'].type(torch.long).to(device)
+        actions = traj['actions'].to(device)
 
-        import pdb; pdb.set_trace()
         predicted_actions = pi(context, images, states)        
         if isinstance(predicted_actions, list):
+            actions = actions.type(torch.long)
             loss, stats = 0, {}
             for d, logits in enumerate(predicted_actions):
                 l_d = cross_entropy(logits.view((-1, logits.shape[-1])), actions[:,:,d].view(-1))
                 acc = np.mean(np.argmax(logits.detach().cpu().numpy(), 2) == actions[:,:,d].cpu().numpy())
                 stats['l_{}'.format(d)], stats['acc_{}'.format(d)] = l_d.item(), acc
                 loss = loss + l_d
-        
+        else:
+            loss = torch.mean(torch.sum((actions - predicted_actions) ** 2, -1))
+            stats = {}
+            actions, predicted_actions = actions.cpu().numpy(), predicted_actions.detach().cpu().numpy()
+            for d in range(actions.shape[-1]):
+                stats['l_{}'.format(d)] = np.mean(np.abs(actions[:,:,d] - predicted_actions[:,:,d]))
         return loss, stats
     trainer.train(policy, forward)

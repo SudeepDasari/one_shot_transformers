@@ -1,7 +1,7 @@
-batch_size: 16
+batch_size: 24
 lr: 0.001
 epochs: 2000
-loader_workers: 48
+loader_workers: 32
 
 lr_schedule:
   type: ExponentialDecay
@@ -13,14 +13,13 @@ dataset:
   height: 170
   width: 226
   T_context: 5
-  T_pair: 20
-  freq: 1
+  T_pair: 1
+  freq: 5
   before_grip: True
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1
   rand_crop: [10, 10]
   state_spec: ['ee_aa', 'ee_vel', 'gripper_qpos', 'object_detected']
-  action_spec: ['discretized_action']
 
 embedding:
   restore: ${FEAT_PATH}
@@ -28,15 +27,15 @@ embedding:
   output_raw: True
 
 goal_state:
-  type: attention goal state
+  type: goal state
   T: 5
   out_dim: 64
 
 policy:
-  pos_enc: [10, 10, 10, 4, 4, 4, 4, 10, 10, 10, 4, 4, 4, 4, 0]
-  ac_bins: [5,5,5,5,5,5,5,2]
-  prior: sawyer_demos
-  action_stack_len: 3
+  discrete_actions: False
   state_dim: 249
   goal_dim: 64
   ac_out: 64
+  adim: 8
+  sg_stack: 1
+  pos_enc: [10, 10, 10, 4, 4, 4, 4, 10, 10, 10, 4, 4, 4, 4, 0]
