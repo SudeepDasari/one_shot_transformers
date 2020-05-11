@@ -139,7 +139,7 @@ class Trainer:
         return copy.deepcopy(self._device)
 
     def _build_optimizer_and_scheduler(self, model):
-        optimizer = torch.optim.Adam(model.parameters(), self._config['lr'])
+        optimizer = torch.optim.Adam(model.parameters(), self._config['lr'], weight_decay=self._config.get('weight_decay', 0))
         return optimizer, build_scheduler(optimizer, self._config.get('lr_schedule', {}))
 
     def _step_optim(self, loss, step, optimizer):
