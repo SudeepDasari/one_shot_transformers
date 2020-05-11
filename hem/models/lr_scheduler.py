@@ -32,8 +32,8 @@ class ReduceOnPlateau(BaseScheduler):
 class ExponentialDecay(BaseScheduler):
     def __init__(self, optimizer, rate):
         assert 0 < rate < 1, "rate must be in (0, 1)"
-        lr_lambda = lambda epoch: rate
-        self._schedule = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda)
+        lr_lambda = lambda epoch: rate ** epoch
+        self._schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     
     def step(self, **kwargs):
         self._schedule.step()
