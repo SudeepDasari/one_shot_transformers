@@ -1,5 +1,5 @@
-batch_size: 24
-lr: 0.001
+batch_size: 32
+lr: 0.0005
 epochs: 2000
 loader_workers: 32
 
