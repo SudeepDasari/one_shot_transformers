@@ -49,6 +49,10 @@ class ImitationModule(nn.Module):
             self._to_logits = nn.Linear(config['policy']['ac_out'], sum(config['policy']['ac_bins']))
         else:
             self._pred_acs = nn.Linear(config['policy']['ac_out'], config['policy']['adim'])
+        
+        self._aux_dim = config['policy'].get('aux_dim', 0)
+        if self._aux_dim:
+            self._aux_pred = nn.Linear(config['policy']['goal_dim'], self._aux_dim)
     
     def forward(self, context, images, state):
         context_embed, img_embed = F.normalize(self._embed(context), dim=-1), F.normalize(self._embed(images), dim=-1)
@@ -56,7 +60,9 @@ class ImitationModule(nn.Module):
         state_goal = torch.cat((self.pe(state), img_state, goal[:, None]), 2)
         if self._stack_len:
             state_goal = self._sg_stack(state_goal)
-        return self._predict_actions(state_goal)
+        
+        aux = self._aux_pred(goal) if self._aux_dim else None
+        return self._predict_actions(state_goal), aux
 
     def _predict_actions(self, state_goal):
         if self._is_lstm:
@@ -114,10 +120,11 @@ if __name__ == '__main__':
     cross_entropy = nn.CrossEntropyLoss()
     def forward(pi, device, context, traj):
         context = context.to(device)
+        grip_location = traj['grip_location'][:,:3].to(device)
         states, images = traj['states'][:,:-1].to(device), traj['images'][:,:-1].to(device)
         actions = traj['actions'].to(device)
 
-        predicted_actions = pi(context, images, states)        
+        predicted_actions, aux = pi(context, images, states)        
         if isinstance(predicted_actions, list):
             actions = actions.type(torch.long)
             loss, stats = 0, {}
@@ -127,8 +134,17 @@ if __name__ == '__main__':
                 stats['l_{}'.format(d)], stats['acc_{}'.format(d)] = l_d.item(), acc
                 loss = loss + l_d
         else:
-            loss = torch.mean(torch.sum((actions - predicted_actions) ** 2, -1))
             stats = {}
+            aux_loss = 0
+            if aux is not None:
+                aux_loss = torch.mean(torch.sum((grip_location - aux) ** 2, 1))
+                aux_pad = aux.detach()
+                if aux.shape[-1] < predicted_actions.shape[-1]:
+                    aux_pad = torch.cat((aux_pad, torch.zeros((aux.shape[0], predicted_actions.shape[-1] - aux.shape[-1])).to(device)), 1)
+                predicted_actions = predicted_actions + aux_pad[:,None]
+                stats['aux_loss'] = aux_loss.item()
+
+            loss = torch.mean(torch.sum((actions - predicted_actions) ** 2, -1)) + aux_loss * config.get('aux_lambda', 1)
             actions, predicted_actions = actions.cpu().numpy(), predicted_actions.detach().cpu().numpy()
             for d in range(actions.shape[-1]):
                 stats['l_{}'.format(d)] = np.mean(np.abs(actions[:,:,d] - predicted_actions[:,:,d]))
