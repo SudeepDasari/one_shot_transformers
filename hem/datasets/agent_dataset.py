@@ -15,7 +15,7 @@ from hem.datasets import get_files, load_traj
 SHUFFLE_RNG = 2843014334
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
-                 T_pair=0, freq=1, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None,
+                 T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None):
         assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         assert mode in ['train', 'val'], "mode should be train or val!"
@@ -53,6 +53,7 @@ class AgentDemonstrations(Dataset):
         self._rand_trans = np.array(rand_translate if rand_translate is not None else [0, 0])
         self._rand_gray = rand_gray
         self._normalize = normalize
+        self._append_s0 = append_s0
 
     def __len__(self):
         return len(self._files)
@@ -109,9 +110,13 @@ class AgentDemonstrations(Dataset):
         ret_dict = {'images': [], 'states': [], 'actions': []}
         if end is None:
             end = len(traj)
-        i = np.random.randint(0, max(1, end - self._T_pair * self._freq))
-        for j in range(self._T_pair + 1):
-            t = traj.get(j * self._freq + i)
+        start = np.random.randint(0, max(1, end - self._T_pair * self._freq))
+        chosen_t = [j * self._freq + start for j in range(self._T_pair + 1)]
+        if self._append_s0:
+            chosen_t = [0] + chosen_t
+
+        for j, t in enumerate(chosen_t):
+            t = traj.get(t)
 
             ret_dict['images'].append(self._crop_and_resize(t['obs']['image'])[None])
             state = []
@@ -119,7 +124,7 @@ class AgentDemonstrations(Dataset):
                 state.append(_get_tensor(k, t))
             ret_dict['states'].append(np.concatenate(state).astype(np.float32)[None])
             
-            if j:
+            if j > 1 or (j==1 and not self._append_s0):
                 action = []
                 for k in action_keys:
                     action.append(_get_tensor(k, t))

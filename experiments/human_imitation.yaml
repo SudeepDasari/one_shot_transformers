@@ -19,6 +19,7 @@ dataset:
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1
   rand_crop: [10, 10]
+  append_s0: True
   state_spec: ['ee_aa', 'gripper_qpos', 'object_detected']
 
 embedding:

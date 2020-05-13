@@ -57,12 +57,13 @@ class ImitationModule(nn.Module):
     def forward(self, context, images, state):
         context_embed, img_embed = F.normalize(self._embed(context), dim=-1), F.normalize(self._embed(images), dim=-1)
         goal, img_state = self._goal_state_embed(context_embed, img_embed)
-        state_goal = torch.cat((self.pe(state), img_state, goal[:, None]), 2)
+        state_goal = torch.cat((self.pe(state), img_state, goal[:, None].repeat(1, images.shape[1], 1)), 2)
         if self._stack_len:
             state_goal = self._sg_stack(state_goal)
         
         aux = self._aux_pred(state_goal[:,0]) if self._aux_dim else None
-        return self._predict_actions(state_goal), aux
+        pred_in = state_goal if state_goal.shape[1] == 1 else state_goal[:,1:]
+        return self._predict_actions(pred_in), aux
 
     def _predict_actions(self, state_goal):
         if self._is_lstm:
