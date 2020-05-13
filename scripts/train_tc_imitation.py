@@ -61,7 +61,7 @@ class ImitationModule(nn.Module):
         if self._stack_len:
             state_goal = self._sg_stack(state_goal)
         
-        aux = self._aux_pred(state_goal) if self._aux_dim else None
+        aux = self._aux_pred(state_goal[:,0]) if self._aux_dim else None
         return self._predict_actions(state_goal), aux
 
     def _predict_actions(self, state_goal):
