@@ -19,7 +19,7 @@ dataset:
   color_jitter: [0.33, 0.4, 0.4]
   rand_gray: 0.1
   rand_crop: [10, 10]
-  state_spec: ['ee_aa', 'ee_vel', 'gripper_qpos', 'object_detected']
+  state_spec: ['ee_aa', 'gripper_qpos', 'object_detected']
 
 embedding:
   restore: ${FEAT_PATH}
@@ -33,9 +33,10 @@ goal_state:
 
 policy:
   discrete_actions: False
-  state_dim: 249
+  state_dim: 165
   goal_dim: 64
   ac_out: 64
   adim: 8
   sg_stack: 1
-  pos_enc: [10, 10, 10, 4, 4, 4, 4, 10, 10, 10, 4, 4, 4, 4, 0]
+  pos_enc: [10, 10, 10, 4, 4, 4, 4, 4, 0]
+  aux_dim: 3
