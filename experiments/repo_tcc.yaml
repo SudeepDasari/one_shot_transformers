@@ -1,7 +1,7 @@
-batch_size: 24
+batch_size: 6
 lr: 0.0001
 epochs: 250
-loader_workers: 16
+loader_workers: 4
 save_freq: 5000
 loss_type: classification
 # lambda: 0.05
