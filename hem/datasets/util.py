@@ -1,7 +1,9 @@
 import numpy as np
 import cv2
+import random
 
 
+SHUFFLE_RNG = 2843014334
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape((1, 1, 3))
 STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape((1, 1, 3))
 SAWYER_DEMO_PRIOR = np.array([-1.95254033,  -3.25514605,  1.0,        -2.85691298,  -1.41135844,
@@ -80,3 +82,16 @@ def randomize_video(frames, color_jitter=None, rand_gray=None, rand_crop=None, r
             fr /= 255
     frames = np.concatenate([fr[None] for fr in frames], 0).astype(np.float32)
     return frames
+
+
+def split_files(file_len, splits, mode='train'):
+    assert sum(splits) == 1 and all([0 <= s for s in splits]), "splits is not valid pdf!"
+
+    order = [i for i in range(file_len)]
+    pivot = int(len(order) * splits[0])
+    if mode == 'train':
+        order = order[:pivot]
+    else:
+        order = order[pivot:]
+    random.Random(SHUFFLE_RNG).shuffle(order)
+    return order

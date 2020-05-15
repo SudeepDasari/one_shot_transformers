@@ -20,13 +20,13 @@ def classification_loss(chosen_i, class_logits, device='cuda:0'):
     return loss, dict(accuracy=accuracy_stat, error=error_stat)
 
 
-def regression_loss(chosen_i, class_logits, device='cuda:0'):
+def regression_loss(chosen_i, class_logits, device='cuda:0', sigma_lambda=0.1):
     betas = torch.softmax(class_logits, 1)
     arange = torch.arange(betas.shape[1], dtype=torch.float32).to(device)
     mu = torch.sum(arange[None] * betas, 1)
     sigma_squares = torch.sum(((arange[None] - mu[:,None]) ** 2) * betas, 1)
     mu_error = (mu - torch.from_numpy(chosen_i.astype(np.float32)).to(device)) ** 2
-    loss = torch.mean(mu_error / (sigma_squares + 1e-6) + config.get('lambda', 0.1) * torch.log(sigma_squares + 1e-6))
+    loss = torch.mean(mu_error / (sigma_squares + 1e-4) + sigma_lambda * torch.log(sigma_squares + 1e-4))
     
     batch_size = class_logits.shape[0]
     argmaxes = np.argmax(class_logits.detach().cpu().numpy(), 1)
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     model_class = get_model(config['model'].pop('type'))
     model = model_class(**config['model'])
 
-    def forward(m, device, t1, t2, _):
+    def forward(m, device, t1, t2):
         t1, t2 = t1.to(device), t2.to(device)
         U = m(t1)
         V = m(t2)
@@ -57,6 +57,6 @@ if __name__ == '__main__':
         class_logits = -torch.sum((v_hat[:,None] - U) ** 2, dim=2)
         
         if config['loss_type'] == 'regression':
-            return regression_loss(chosen_i, class_logits, device)
+            return regression_loss(chosen_i, class_logits, device, config.get('lambda', 0.1))
         return classification_loss(chosen_i, class_logits, device)
     trainer.train(model, forward)

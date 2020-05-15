@@ -1,5 +1,4 @@
 from torch.utils.data import Dataset
-from .agent_dataset import SHUFFLE_RNG
 import torch
 import os
 import numpy as np
@@ -9,6 +8,7 @@ from hem.datasets.util import resize, crop, randomize_video
 import cv2
 import tqdm
 import multiprocessing
+from hem.datasets.util import split_files
 
 
 class _CachedTraj:
@@ -48,17 +48,10 @@ def _build_cache(traj_file):
 
 class PairedFrameDataset(Dataset):
     def __init__(self, root_dir, mode='train', split=[0.9, 0.1], color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, crop=None, height=224, width=224, cache=None, teacher_first=False):
-        assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
         agent_files, teacher_files = get_files(os.path.join(root_dir, 'traj*_robot')), get_files(os.path.join(root_dir, 'traj*_human'))
         assert len(agent_files) == len(teacher_files), "lengths don't match!"
 
-        order = [i for i in range(len(agent_files))]
-        pivot = int(len(order) * split[0])
-        if mode == 'train':
-            order = order[:pivot]
-        else:
-            order = order[pivot:]
-        random.Random(SHUFFLE_RNG).shuffle(order)
+        order = split_files(len(agent_files), split, mode)
         self._agent_files = [agent_files[o] for o in order]
         self._teacher_files = [teacher_files[o] for o in order]
 

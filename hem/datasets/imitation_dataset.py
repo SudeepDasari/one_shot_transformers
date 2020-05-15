@@ -1,12 +1,11 @@
 from torch.utils.data import Dataset
-from .agent_dataset import AgentDemonstrations, SHUFFLE_RNG
+from .agent_dataset import AgentDemonstrations
 from .teacher_dataset import TeacherDemonstrations
 from hem.datasets import load_traj
-from hem.datasets.util import randomize_video
+from hem.datasets.util import randomize_video, split_files
 import torch
 import os
 import numpy as np
-import random
 import json
 
 
@@ -18,21 +17,13 @@ class _AgentDatasetNoContext(AgentDemonstrations):
 
 class ImitationDataset(Dataset):
     def __init__(self, root_dir, mode='train', split=[0.9, 0.1], before_grip=False, **params):
-        assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
-
         self._root = os.path.expanduser(root_dir)
         mappings_file = os.path.join(self._root, 'mappings.json')
         with open(mappings_file, 'r') as f:
             self._mappings = json.load(f)
         
-        teacher_files = list(self._mappings.keys())
-        order = [i for i in range(len(teacher_files))]
-        pivot = int(len(order) * split[0])
-        if mode == 'train':
-            order = order[:pivot]
-        else:
-            order = order[pivot:]
-        random.Random(SHUFFLE_RNG).shuffle(order)
+        teacher_files = sorted(list(self._mappings.keys()))
+        order = split_files(len(teacher_files), split, mode)
         self._teacher_files = [teacher_files[o] for o in order]
         self._teacher_dataset = TeacherDemonstrations(files=[], **params)
         self._agent_dataset = _AgentDatasetNoContext(files=[], **params)

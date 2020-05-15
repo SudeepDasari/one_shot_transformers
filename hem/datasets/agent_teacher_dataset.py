@@ -1,11 +1,13 @@
 from torch.utils.data import Dataset
-from .agent_dataset import AgentDemonstrations, SHUFFLE_RNG
+from .agent_dataset import AgentDemonstrations
 from .teacher_dataset import TeacherDemonstrations
-from hem.datasets import get_files
+from hem.datasets import get_files, load_traj
 import torch
 import os
 import numpy as np
 import random
+import json
+from hem.datasets.util import split_files
 
 
 class AgentTeacherDataset(Dataset):
@@ -30,48 +32,28 @@ class AgentTeacherDataset(Dataset):
 
 
 class PairedAgentTeacherDataset(Dataset):
-    def __init__(self, root_dir, pretend_unpaired=False, t_per_a=1, mode='train', split=[0.9, 0.1], **params):
-        assert all([0 <= s <=1 for s in split]) and sum(split)  == 1, "split not valid!"
-        agent_files, teacher_files = get_files(os.path.join(root_dir, 'traj*_robot')), get_files(os.path.join(root_dir, 'traj*_human'))
-        order = [i for i in range(len(agent_files))]
-        pivot = int(len(order) * split[0])
-        if mode == 'train':
-            order = order[:pivot]
-        else:
-            order = order[pivot:]
-        random.Random(SHUFFLE_RNG).shuffle(order)
-        agent_files = [agent_files[o] for o in order]
-        teacher_files = [teacher_files[o*t_per_a:(o+1)*t_per_a] for o in order]
-        teacher_files = [item for elems in teacher_files for item in elems]
+    def __init__(self, root_dir, mode='train', split=[0.9, 0.1], **params):
+        self._root_dir = os.path.expanduser(root_dir)
+        with open(os.path.join(self._root_dir, 'mappings_1_to_1.json'), 'r') as f:
+            self._mapping = json.load(f)
+        self._teacher_files = sorted(list(self._mapping.keys()))
+        self._teacher_files = [self._teacher_files[o] for o in split_files(len(self._teacher_files), split, mode)]
 
-        self._agent_dataset = AgentDemonstrations(files=agent_files, **params)
-        self._teacher_dataset = TeacherDemonstrations(files=teacher_files, **params)
-        assert t_per_a > 0, "t_per_a cannot be negative!"
-        assert pretend_unpaired or len(self._agent_dataset) * t_per_a == len(self._teacher_dataset), "Lengths must match if data is paired!"
-        self._pretend_unpaired = pretend_unpaired
-        self._t_per_a = t_per_a
+        self._agent_dataset = AgentDemonstrations(files=[], **params)
+        self._teacher_dataset = TeacherDemonstrations(files=[], **params)
 
     def __len__(self):
-        if self._pretend_unpaired:
-            return len(self._agent_dataset) + len(self._teacher_dataset)
-        return len(self._agent_dataset)
+        return len(self._teacher_files)
     
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
         assert 0 <= index < len(self), "invalid index!"
 
-        if self._pretend_unpaired:
-            if index < len(self._agent_dataset):
-                ctx1, ctx2 = [self._agent_dataset[index][1] for _ in range(2)]
-            else:
-                ctx1, ctx2 = [self._teacher_dataset[index - len(self._agent_dataset)] for _ in range(2)]
-            return ctx1, ctx2
-        
-        # pairs aren't returned, fix later for imitation learning?
-        _, agent_context = self._agent_dataset[index]
-        t_index = index * self._t_per_a + np.random.randint(self._t_per_a)
-        teacher_context = self._teacher_dataset[t_index]
+        teacher_traj = load_traj(os.path.join(self._root_dir, self._teacher_files[index]))
+        agent_traj = load_traj(os.path.join(self._root_dir, self._mapping[self._teacher_files[index]]))
+        _, agent_context = self._agent_dataset.proc_traj(agent_traj)
+        teacher_context = self._teacher_dataset.proc_traj(teacher_traj)
         return teacher_context, agent_context
 
 
