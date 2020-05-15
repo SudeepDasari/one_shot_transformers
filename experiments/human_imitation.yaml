@@ -1,7 +1,7 @@
-batch_size: 20
+batch_size: 5
 lr: 0.0005
 epochs: 2000
-loader_workers: 32
+loader_workers: 1
 
 lr_schedule:
   type: ExponentialDecay
@@ -12,7 +12,7 @@ dataset:
   root_dir: ${REPO_DIR}
   height: 170
   width: 226
-  T_context: 5
+  T_context: 3
   T_pair: 1
   freq: 5
   before_grip: True
@@ -26,16 +26,15 @@ embedding:
   restore: ${FEAT_PATH}
   type: 'resnet'
   output_raw: True
+  drop_dim: 3
 
 goal_state:
-  type: goal state
-  T: 5
-  out_dim: 64
+  type: attention goal state
 
 policy:
   discrete_actions: False
-  state_dim: 165
-  goal_dim: 64
+  state_dim: 229
+  goal_dim: 128
   ac_out: 64
   adim: 8
   sg_stack: 1
