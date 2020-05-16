@@ -24,6 +24,7 @@ class ImitationModule(nn.Module):
 
         self._pe = config['policy']['pos_enc']
         self._embed = embed
+        self._normalize_embed = config['policy'].get('normalize_embed', True)
         self._goal_state_embed = get_model(config['goal_state'].pop('type'))
         self._goal_state_embed = self._goal_state_embed(**config['goal_state'])
 
@@ -55,7 +56,9 @@ class ImitationModule(nn.Module):
             self._aux_pred = nn.Linear(self._in_dim , self._aux_dim)
     
     def forward(self, context, images, state):
-        context_embed, img_embed = F.normalize(self._embed(context), dim=-1), F.normalize(self._embed(images), dim=-1)
+        context_embed, img_embed = self._embed(context), self._embed(images)
+        if self._normalize_embed:
+            context_embed, img_embed = F.normalize(context_embed, dim=-1), F.normalize(img_embed, dim=-1)
         goal, img_state = self._goal_state_embed(context_embed, img_embed)
         state_goal = torch.cat((self.pe(state), img_state, goal[:, None].repeat(1, images.shape[1], 1)), 2)
         if self._stack_len:
