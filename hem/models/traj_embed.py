@@ -86,7 +86,7 @@ class AttentionGoalState(nn.Module):
         self._upsample_goal = nn.Sequential(*upsample_goal)
         self._out_dim = out_dim
 
-    def forward(self, context, frame):
+    def forward(self, context, frame, ret_attn=False):
         """
         context should be [B, T, in_dim]
         frame should be [B, in_dim]
@@ -95,13 +95,17 @@ class AttentionGoalState(nn.Module):
         goal_embed = self._spatial_pool(self._temporal_pool(ctx_embeds))[:,:,0,0,0]
         
         B, T, C, H, W = frame.shape
-        fr = frame.view((B * T, C, H, W))
         state_embed = self._upsample_goal(frame.view((B * T, C, H, W))).reshape((B, T, self._out_dim, H*4, W*4))
         state_embed = state_embed.reshape((B * T, self._out_dim, H * W * 16))
         V = self._pe(state_embed.permute(2, 0, 1)).transpose(0, 1)
         
-        SG = torch.matmul(state_embed.transpose(1, 2), goal_embed[:,:,None].repeat((T, 1, 1))) / np.sqrt(self._out_dim)
-        state_goal_attn = torch.sum(torch.softmax(SG, 1) * V, 1)
+        goal_attn = goal_embed[:, None].repeat((1, T, 1)).reshape((B*T, self._out_dim, 1))
+        SG = torch.matmul(state_embed.transpose(1, 2), goal_attn)
+        attn = torch.softmax(SG / np.sqrt(self._out_dim), 1)
+        state_goal_attn = torch.sum(attn * V, 1)
+
+        if ret_attn:
+            return goal_embed, state_goal_attn.reshape((B, T, self._out_dim)), attn[:,:,0].reshape((B, T, H*4, W*4))
         return goal_embed, state_goal_attn.reshape((B, T, self._out_dim))
 
 
