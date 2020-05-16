@@ -40,3 +40,5 @@ policy:
   sg_stack: 1
   pos_enc: [10, 10, 10, 4, 4, 4, 4, 4, 0]
   aux_dim: 3
+  normalize_embed: False
+  lstm: False
