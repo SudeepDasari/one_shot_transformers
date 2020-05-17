@@ -53,38 +53,41 @@ class PositionalEncoding(nn.Module):
 
 
 class _NonLocalLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, feedforward_dim=512, dropout=0):
+    def __init__(self, in_dim, out_dim, feedforward_dim=512, dropout=0, temperature=None):
         super().__init__()
-        self._in_dim = in_dim
-        self._K = nn.Conv3d(in_dim, feedforward_dim, 1)
-        self._V = nn.Conv3d(in_dim, feedforward_dim, 1)
-        self._Q = nn.Conv3d(in_dim, feedforward_dim, 1)
-        self._a1, self._drp1 = nn.ReLU(inplace=dropout==0), nn.Dropout3d(dropout)
+
+        self._temperature = temperature if temperature is not None else np.sqrt(in_dim)
+        self._K = nn.Conv3d(in_dim, feedforward_dim, 1, bias=False)
+        self._V = nn.Conv3d(in_dim, feedforward_dim, 1, bias=False)
+        self._Q = nn.Conv3d(in_dim, feedforward_dim, 1, bias=False)
         self._out = nn.Conv3d(feedforward_dim, out_dim, 1)
-        self._a2, self._drop2 = nn.ReLU(inplace=dropout==0), nn.Dropout3d(dropout)
+        self._a1, self._drop1 = nn.ReLU(inplace=dropout==0), nn.Dropout3d(dropout)
         self._norm = nn.BatchNorm3d(out_dim)
     
     def forward(self, inputs):
         K, Q, V = self._K(inputs), self._Q(inputs), self._V(inputs)
         B, C, T, H, W = K.shape
-        
-        KQ = torch.matmul(K.reshape((B, C, T*H*W)).transpose(1, 2), Q.reshape((B, C, T*H*W)))
-        attn = F.softmax(KQ / np.sqrt(self._in_dim), 2)
-        V = torch.sum(V.view((B, C, T*H*W, 1)) * attn[:,None], 3).reshape((B, C, T, H, W))
-        V = self._drp1(self._a1(V))
-        return self._norm(inputs + self._drop2(self._a2(self._out(V))))
+        K, Q, V = [t.reshape((B, C, T*H*W)) for t in (K, Q, V)]
+        KQ = torch.matmul(K.transpose(1, 2), Q)
+        attn = F.softmax(KQ / self._temperature, 2)
+        V = torch.sum(V.unsqueeze(-1) * attn[:,None], 3).reshape((B, C, T, H, W))
+        return self._norm(inputs + self._drop1(self._a1(self._out(V))))
+
 
 class AttentionGoalState(nn.Module):
-    def __init__(self, in_dim=1024, out_dim=128, max_pos_len=3000, num_attn=2, dropout=0.0, T=3, ff_dim=512):
+    def __init__(self, in_dim=1024, out_dim=128, max_pos_len=3000, num_attn=2, dropout=0.0, T=3, ff_dim=512, temperature=1):
         super().__init__()
-        self._pe = PositionalEncoding(out_dim, max_len=max_pos_len, dropout=dropout)
-        self._nonloc_layers = nn.Sequential(*[_NonLocalLayer(in_dim, in_dim, ff_dim, dropout) for _ in range(num_attn)])
-        self._temporal_pool = nn.Sequential(nn.Conv3d(in_dim, out_dim, T), nn.ReLU(inplace=True))
+        self._pe = PositionalEncoding(ff_dim, max_len=max_pos_len, dropout=dropout)
+        self._temperature = temperature if temperature is not None else np.sqrt(128)
+        self._nonloc_layers = nn.Sequential(*[_NonLocalLayer(in_dim, in_dim, ff_dim, dropout, self._temperature) for _ in range(num_attn)])
+        self._temporal_pool = nn.Sequential(nn.Conv3d(in_dim, ff_dim, T), nn.ReLU(inplace=True))
         self._spatial_pool = nn.AdaptiveAvgPool3d(1)
         upsample_goal = [torch.nn.ConvTranspose2d(in_dim, ff_dim, 2, stride=2), nn.ReLU(inplace=True)]
-        upsample_goal.append(torch.nn.ConvTranspose2d(ff_dim, out_dim, 2, stride=2))
+        upsample_goal.append(torch.nn.ConvTranspose2d(ff_dim, ff_dim, 2, stride=2))
         self._upsample_goal = nn.Sequential(*upsample_goal)
-        self._out_dim = out_dim
+        self._out_dim, self._ff_dim = out_dim, ff_dim
+        self._o_goal = nn.Sequential(nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, out_dim))
+        self._o_state = nn.Sequential(nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, out_dim))
 
     def forward(self, context, frame, ret_attn=False):
         """
@@ -95,18 +98,21 @@ class AttentionGoalState(nn.Module):
         goal_embed = self._spatial_pool(self._temporal_pool(ctx_embeds))[:,:,0,0,0]
         
         B, T, C, H, W = frame.shape
-        state_embed = self._upsample_goal(frame.view((B * T, C, H, W))).reshape((B, T, self._out_dim, H*4, W*4))
-        state_embed = state_embed.reshape((B * T, self._out_dim, H * W * 16))
+        state_embed = self._upsample_goal(frame.view((B * T, C, H, W))).reshape((B, T, self._ff_dim, H*4, W*4))
+        state_embed = state_embed.reshape((B * T, self._ff_dim, H * W * 16))
         V = self._pe(state_embed.permute(2, 0, 1)).transpose(0, 1)
         
-        goal_attn = goal_embed[:, None].repeat((1, T, 1)).reshape((B*T, self._out_dim, 1))
+        goal_attn = goal_embed[:, None].repeat((1, T, 1)).reshape((B*T, self._ff_dim, 1))
         SG = torch.matmul(state_embed.transpose(1, 2), goal_attn)
-        attn = torch.softmax(SG / np.sqrt(self._out_dim), 1)
-        state_goal_attn = torch.sum(attn * V, 1)
+        attn = torch.softmax(SG / self._temperature, 1)
+        state_goal_attn = torch.sum(attn * V, 1).reshape((B, T, self._ff_dim))
+
+        goal_embed = self._o_goal(goal_embed)
+        state_goal_attn = self._o_state(state_goal_attn)
 
         if ret_attn:
-            return goal_embed, state_goal_attn.reshape((B, T, self._out_dim)), attn[:,:,0].reshape((B, T, H*4, W*4))
-        return goal_embed, state_goal_attn.reshape((B, T, self._out_dim))
+            return goal_embed, state_goal_attn, (attn[:,:,0].reshape((B, T, H*4, W*4)), V)
+        return goal_embed, state_goal_attn
 
 
 class GoalState(nn.Module):

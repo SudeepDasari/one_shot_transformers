@@ -53,7 +53,7 @@ class ImitationModule(nn.Module):
         
         self._aux_dim = config['policy'].get('aux_dim', 0)
         if self._aux_dim:
-            self._aux_pred = nn.Linear(self._in_dim , self._aux_dim)
+            self._aux_pred = nn.Linear(config['policy'].get('aux_in', 0) , self._aux_dim)
     
     def forward(self, context, images, state):
         context_embed, img_embed = self._embed(context), self._embed(images)
@@ -64,7 +64,7 @@ class ImitationModule(nn.Module):
         if self._stack_len:
             state_goal = self._sg_stack(state_goal)
         
-        aux = self._aux_pred(state_goal[:,0]) if self._aux_dim else None
+        aux = self._aux_pred(torch.cat((goal, img_state[:,0]), 1)) if self._aux_dim else None
         pred_in = state_goal if state_goal.shape[1] == 1 else state_goal[:,1:]
         return self._predict_actions(pred_in), aux
 
