@@ -49,7 +49,8 @@ class ImitationModule(nn.Module):
             self._ac_bins = config['policy']['ac_bins']
             self._to_logits = nn.Linear(config['policy']['ac_out'], sum(config['policy']['ac_bins']))
         else:
-            self._pred_acs = nn.Linear(config['policy']['ac_out'], config['policy']['adim'])
+            self._pred_mean = nn.Linear(config['policy']['ac_out'], config['policy']['adim'])
+            self._pred_var = nn.Linear(config['policy']['ac_out'], config['policy']['adim'])
         
         self._aux_dim = config['policy'].get('aux_dim', 0)
         if self._aux_dim:
@@ -83,7 +84,9 @@ class ImitationModule(nn.Module):
                 bins = bins[:,:,a:]
             return ac_logits
         else:
-            return self._pred_acs(ac_proc)        
+            mu = self._pred_mean(ac_proc)
+            ln_var = self._pred_var(ac_proc)
+            return mu, ln_var      
 
     def pe(self, state):
         st = []
@@ -138,19 +141,21 @@ if __name__ == '__main__':
                 stats['l_{}'.format(d)], stats['acc_{}'.format(d)] = l_d.item(), acc
                 loss = loss + l_d
         else:
+            mean, log_var = predicted_actions
             stats = {}
             aux_loss = 0
             if aux is not None:
                 aux_loss = torch.mean(torch.sum((grip_location - aux) ** 2, 1))
                 aux_pad = aux
-                if aux.shape[-1] < predicted_actions.shape[-1]:
-                    aux_pad = torch.cat((aux_pad, torch.zeros((aux.shape[0], predicted_actions.shape[-1] - aux.shape[-1])).to(device)), 1)
-                predicted_actions = predicted_actions + aux_pad[:,None]
+                if aux.shape[-1] < mean.shape[-1]:
+                    aux_pad = torch.cat((aux_pad, torch.zeros((aux.shape[0], mean.shape[-1] - aux.shape[-1])).to(device)), 1)
+                mean = mean + aux_pad[:,None]
                 stats['aux_loss'] = aux_loss.item()
 
-            loss = torch.mean(torch.sum((actions - predicted_actions) ** 2, -1)) + aux_loss * config.get('aux_lambda', 1)
-            actions, predicted_actions = actions.cpu().numpy(), predicted_actions.detach().cpu().numpy()
+            ln_likelihood = -0.5 * (torch.sum(torch.exp(-log_var) * (mean - actions) ** 2, 2) + torch.logsumexp(log_var, 2))
+            loss = -torch.mean(ln_likelihood) + aux_loss * config.get('aux_lambda', 1)
+            actions, mean = actions.cpu().numpy(), mean.detach().cpu().numpy()
             for d in range(actions.shape[-1]):
-                stats['l_{}'.format(d)] = np.mean(np.abs(actions[:,:,d] - predicted_actions[:,:,d]))
+                stats['l_{}'.format(d)] = np.mean(np.abs(actions[:,:,d] - mean[:,:,d]))
         return loss, stats
     trainer.train(policy, forward)

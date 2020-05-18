@@ -1,7 +1,7 @@
-batch_size: 20
+batch_size: 15
 lr: 0.0005
 epochs: 2000
-loader_workers: 32
+loader_workers: 16
 
 lr_schedule:
   type: ExponentialDecay
