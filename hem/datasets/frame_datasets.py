@@ -9,6 +9,7 @@ import cv2
 import tqdm
 import multiprocessing
 from hem.datasets.util import split_files
+import json
 
 
 class _CachedTraj:
@@ -48,7 +49,10 @@ def _build_cache(traj_file):
 
 class PairedFrameDataset(Dataset):
     def __init__(self, root_dir, mode='train', split=[0.9, 0.1], color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, normalize=True, crop=None, height=224, width=224, cache=None, teacher_first=False):
-        agent_files, teacher_files = get_files(os.path.join(root_dir, 'traj*_robot')), get_files(os.path.join(root_dir, 'traj*_human'))
+        root_dir = os.path.expanduser(root_dir)
+        map_file = json.load(open(os.path.join(root_dir, 'mappings_1_to_1.json'), 'r'))
+        teacher_files = sorted(list(map_file.keys()))
+        agent_files = [map_file[k] for k in teacher_files]
         assert len(agent_files) == len(teacher_files), "lengths don't match!"
 
         order = split_files(len(agent_files), split, mode)
