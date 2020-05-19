@@ -24,6 +24,9 @@ def get_dataset(name):
     elif name == 'paired frames':
         from .frame_datasets import PairedFrameDataset
         return PairedFrameDataset
+    elif name == 'synced frames':
+        from .frame_datasets import SyncedFramesDataset
+        return SyncedFramesDataset
     elif name == 'unpaired frames':
         from .frame_datasets import UnpairedFrameDataset
         return UnpairedFrameDataset

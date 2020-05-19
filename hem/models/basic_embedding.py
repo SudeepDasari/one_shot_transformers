@@ -186,3 +186,7 @@ class VGGFeats(nn.Module):
         if has_time:
             return visual_feats.reshape((B, T, self._out_dim))
         return visual_feats
+
+    @property
+    def dim(self):
+        return self._out_dim
