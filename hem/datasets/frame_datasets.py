@@ -52,7 +52,8 @@ class PairedFrameDataset(Dataset):
         root_dir = os.path.expanduser(root_dir)
         map_file = json.load(open(os.path.join(root_dir, 'mappings_1_to_1.json'), 'r'))
         teacher_files = sorted(list(map_file.keys()))
-        agent_files = [map_file[k] for k in teacher_files]
+        agent_files = [os.path.join(root_dir, map_file[k]) for k in teacher_files]
+        teacher_files = [os.path.join(root_dir, teacher_fname) for teacher_fname in teacher_files]
         assert len(agent_files) == len(teacher_files), "lengths don't match!"
 
         order = split_files(len(agent_files), split, mode)
@@ -112,7 +113,6 @@ class PairedFrameDataset(Dataset):
         return traj
 
     def _slice(self, traj, chosen_slice, is_teacher=False):
-        tf = traj
         traj = self._load(traj)
         delta = max(int(len(traj) // 3), 1)
         if chosen_slice == 1 and not is_teacher:
@@ -149,3 +149,87 @@ class UnpairedFrameDataset(PairedFrameDataset):
         chosen_slice = np.random.randint(self._slices)
         img = self._slice(traj, chosen_slice, is_teacher)
         return self._format_img(img.copy()), self._format_img(img.copy())
+
+
+class SyncedFramesDataset(PairedFrameDataset):
+    TEACHER_TIME_MARGIN = 6
+    AGENT_STATE_MARGIN = 0.1
+    def __init__(self, root_dir, **kwargs):
+        kwargs.pop('cache', None)
+        root_dir = os.path.expanduser(root_dir)
+        with open(os.path.join(root_dir, 'human_grip_timings.json'), 'r') as f:
+            self._timing_map = json.load(f)
+            for k in list(self._timing_map.keys()):
+                self._timing_map[os.path.join(root_dir, k)] = self._timing_map.pop(k)
+        super().__init__(root_dir, **kwargs)
+    
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+        assert 0 <= index < len(self), "invalid index!"
+        agent, teacher = load_traj(self._agent_files[index]), load_traj(self._teacher_files[index])
+
+        # get grip timings for sampling
+        obj_detected = np.concatenate([agent.get(t, False)['obs']['object_detected'] for t in range(len(agent))])
+        qpos = np.concatenate([agent.get(t, False)['obs']['gripper_qpos'] for t in range(len(agent))])
+        if obj_detected.any():
+            agent_grip_t = int(np.argmax(obj_detected))
+        else:
+            closed = np.isclose(qpos, 0)
+            agent_grip_t = int(np.argmax(closed))
+        grip_loc = agent.get(agent_grip_t, False)['obs']['ee_pos'][:3]
+        teacher_grip_t = self._timing_map[self._teacher_files[index]]
+
+        phase = ['START', 'GRIP', 'DROP']
+        if teacher_grip_t < self.TEACHER_TIME_MARGIN:
+            phase = phase[1:]
+        phase = phase[np.random.randint(len(phase))]
+
+        if phase == 'START':
+            teacher_t = np.random.randint(teacher_grip_t - self.TEACHER_TIME_MARGIN + 1)
+            agent_t = []
+            for t_prime in range(agent_grip_t):
+                obs_t_prime = agent.get(t_prime, False)['obs']
+                delta = np.linalg.norm(obs_t_prime['ee_pos'][:3] - grip_loc)
+                if  delta > 1.25 * self.AGENT_STATE_MARGIN:
+                    agent_t.append(t_prime)
+            agent_t = int(np.random.choice(agent_t)) if len(agent_t) else 0
+            teacher_hard_neg = np.random.randint(teacher_grip_t - int(0.4 * self.TEACHER_TIME_MARGIN), len(teacher))
+        elif phase == 'GRIP':
+            teacher_t, agent_t = teacher_grip_t, agent_grip_t
+            if teacher_grip_t < self.TEACHER_TIME_MARGIN or np.random.uniform() < 0.5:
+                teacher_hard_neg = np.random.randint(min(len(teacher) - 1, teacher_grip_t + int(1.5 * self.TEACHER_TIME_MARGIN)), len(teacher))
+            else:
+                teacher_hard_neg = np.random.randint(max(1, teacher_grip_t - int(1.5 * self.TEACHER_TIME_MARGIN) + 1))
+        else:
+            teacher_t = np.random.randint(len(teacher) - self.TEACHER_TIME_MARGIN, len(teacher))
+            agent_t = []
+            for t_prime in range(agent_grip_t, len(agent)):
+                obs_t_prime = agent.get(t_prime, False)['obs']
+                delta = np.linalg.norm(obs_t_prime['ee_pos'][:3] - grip_loc)
+                if  delta > 1.25 * self.AGENT_STATE_MARGIN:
+                    agent_t.append(t_prime)
+            agent_t = int(np.random.choice(agent_t)) if len(agent_t) else len(agent) - 1
+            teacher_hard_neg = np.random.randint(min(teacher_grip_t + int(0.4 * self.TEACHER_TIME_MARGIN), len(teacher)))
+
+        a_t = agent_t
+        agent_t = agent[agent_t]['obs']
+        agent_hard_neg = []
+        for t_prime in range(len(agent)):
+            obs_t_prime = agent.get(t_prime, False)['obs']
+            delta = np.linalg.norm(obs_t_prime['ee_pos'][:3] - agent_t['ee_pos'][:3])
+            if  delta > self.AGENT_STATE_MARGIN or (obs_t_prime['object_detected'] != agent_t['object_detected'] and delta > 0.5 * self.AGENT_STATE_MARGIN):
+                agent_hard_neg.append(t_prime)
+        agent_hard_neg = int(agent_hard_neg[np.random.randint(len(agent_hard_neg))])
+
+        K, Q = teacher[teacher_t]['obs']['image'], agent_t['image']
+        N = agent[agent_hard_neg]['obs']['image'] if np.random.uniform() < 0.5 else teacher[teacher_hard_neg]['obs']['image']
+        if np.random.uniform() < 0.5:
+            K, Q = Q, K
+        K = self._format_img(K)
+        Q, N = self._format_vid([Q, N])
+        return K, Q, N
+
+    def _format_vid(self, vid):
+        vid = [resize(crop(img, self._crop), self._im_dims, False) for img in vid]
+        return np.transpose(randomize_video(vid, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize), (0, 3, 1, 2))

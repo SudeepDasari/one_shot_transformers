@@ -33,8 +33,8 @@ class Trainer:
         dataset_class = get_dataset(self._config['dataset'].pop('type'))
         dataset = dataset_class(**self._config['dataset'], mode='train')
         val_dataset = dataset_class(**self._config['dataset'], mode='val')
-        self._train_loader = DataLoader(dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=self._config.get('loader_workers', cpu_count()), drop_last=drop_last)
-        self._val_loader = DataLoader(val_dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=1, drop_last=True)
+        self._train_loader = DataLoader(dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=self._config.get('loader_workers', cpu_count()), drop_last=drop_last, worker_init_fn=lambda w: np.random.seed(np.random.randint(2 ** 29) + w))
+        self._val_loader = DataLoader(val_dataset, batch_size=self._config['batch_size'], shuffle=True, num_workers=min(1, self._config.get('loader_workers', cpu_count())), drop_last=True, worker_init_fn=lambda w: np.random.seed(np.random.randint(2 ** 29) + w))
 
         # set of file saving
         save_dir = os.path.join(self._config.get('save_path', './'), '{}_ckpt-{}-{}_{}-{}-{}'.format(save_name, now.hour, now.minute, now.day, now.month, now.year))

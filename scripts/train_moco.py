@@ -52,36 +52,43 @@ if __name__ == '__main__':
     # build loss_fn
     cross_entropy = torch.nn.CrossEntropyLoss()
 
-    def train_forward(model, device, b1, b2):
+    def train_forward(model, device, b1, b2, hard_negatives=None):
         global moco_queue, moco_ptr, temperature, last_k
         if last_k is not None:
-            moco_queue[:,moco_ptr:moco_ptr+b1.shape[0]] = last_k
-            moco_ptr = (moco_ptr + config['batch_size']) % moco_queue.shape[1]
+            assert moco_queue.shape[1] % last_k.shape[1] == 0, "key shape must divide moco_queue!"
+            moco_queue[:,moco_ptr:moco_ptr+last_k.shape[1]] = last_k
+            moco_ptr = (moco_ptr + last_k.shape[1]) % moco_queue.shape[1]
 
         moco_model.momentum_update()
         labels = torch.zeros(b1.shape[0], dtype=torch.long).to(device)
 
         # order for shuffled bnorm
-        order = list(range(config['batch_size']))
-        np.random.shuffle(order)
         b1, b2 = b1.to(device), b2.to(device)
+        if hard_negatives is not None:
+            b2 = torch.cat((b2, hard_negatives.to(device)), 0)
+        order = list(range(b2.shape[0])); np.random.shuffle(order)
         q, k = model(b1, b2[order])
         k = k[np.argsort(order)]
 
-        l_pos = torch.matmul(q[:,None], k[:,:,None])[:,0]
         l_neg = torch.matmul(q, moco_queue)
+        if hard_negatives is not None:
+            k, hn = k[:b1.shape[0]], k[b1.shape[0]:]
+            l_neg = torch.cat((torch.matmul(q[:,None], hn[:,:,None])[:,0], l_neg), 1)
+        l_pos = torch.matmul(q[:,None], k[:,:,None])[:,0]
         logits = torch.cat((l_pos, l_neg), 1) / temperature
         loss = cross_entropy(logits, labels)
 
         last_k = k.transpose(1, 0)
+        if hard_negatives is not None:
+            last_k = torch.cat((last_k, hn.transpose(1, 0)), 1)
         top_k = torch.topk(logits, 5, dim=1)[1].cpu().numpy()
         acc_1 = np.sum(top_k[:,0] == 0) / b1.shape[0]
         acc_5 = np.sum([ar.any() for ar in top_k == 0]) / b1.shape[0]
         return loss, {'acc1': acc_1, 'acc5': acc_5}
     
-    def val_forward(model, device, b1, b2):
+    def val_forward(model, device, b1, b2, hard_negatives=None):
         global last_k, train_forward
-        rets = train_forward(model, device, b1, b2)
+        rets = train_forward(model, device, b1, b2, hard_negatives)
         last_k = None
         return rets
     trainer.train(moco_model, train_forward, moco_model.wrapped_model, val_fn=val_forward)
