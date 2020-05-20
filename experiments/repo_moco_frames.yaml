@@ -2,7 +2,7 @@ batch_size: 128
 lr: 0.0001
 epochs: 2000
 loader_workers: 32
-save_freq: 5000
+save_freq: 2500
 moco_queue_size: 4096
 log_freq: 50
 
