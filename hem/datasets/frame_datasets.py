@@ -214,11 +214,19 @@ class SyncedFramesDataset(PairedFrameDataset):
 
         agent_t = agent[agent_t]['obs']
         agent_hard_neg = []
-        for t_prime in range(len(agent)):
-            obs_t_prime = agent.get(t_prime, False)['obs']
-            delta = np.linalg.norm(obs_t_prime['ee_pos'][:3] - agent_t['ee_pos'][:3])
-            if  delta > self.AGENT_STATE_MARGIN or (obs_t_prime['object_detected'] != agent_t['object_detected'] and delta > 0.5 * self.AGENT_STATE_MARGIN):
-                agent_hard_neg.append(t_prime)
+        if phase == 'GRIP' and np.random.uniform() < 0.75:
+            for i in range(5, 70):
+                t_prime = agent_grip_t - i
+                obs_t_prime = agent.get(t_prime, False)['obs']
+                z_delta = obs_t_prime['ee_pos'][3] - agent_t['ee_pos'][3]
+                if z_delta < 0.2 and z_delta > 0.05:
+                    agent_hard_neg.append(t_prime)
+        if not len(agent_hard_neg):
+            for t_prime in range(len(agent)):
+                obs_t_prime = agent.get(t_prime, False)['obs']
+                delta = np.linalg.norm(obs_t_prime['ee_pos'][:3] - agent_t['ee_pos'][:3])
+                if  delta > self.AGENT_STATE_MARGIN or (obs_t_prime['object_detected'] != agent_t['object_detected'] and delta > 0.5 * self.AGENT_STATE_MARGIN):
+                    agent_hard_neg.append(t_prime)
         agent_hard_neg = int(agent_hard_neg[np.random.randint(len(agent_hard_neg))])
 
         K, Q = teacher[teacher_t]['obs']['image'], agent_t['image']

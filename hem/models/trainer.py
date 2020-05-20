@@ -123,6 +123,8 @@ class Trainer:
                         elif isinstance(model, nn.DataParallel):
                             save_module = model.module
                         torch.save(save_module, self._save_fname + '-{}.pt'.format(self._step))
+                    if self._config.get('save_optim', False):
+                        torch.save(optimizer.state_dict(), self._save_fname + '-optim-{}.pt'.format(self._step))
             scheduler.step(val_loss=vl_running_mean)
 
     @property
