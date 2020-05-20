@@ -50,7 +50,7 @@ class Trainer:
     def config(self):
         return copy.deepcopy(self._config)
 
-    def train(self, model, train_fn, weights_fn=None, val_fn=None):
+    def train(self, model, train_fn, weights_fn=None, val_fn=None, save_fn=None):
         # wrap model in DataParallel if needed and transfer to correct device
         if self.device_count > 1:
             model = nn.DataParallel(model, device_ids=self.device_list)
@@ -114,12 +114,15 @@ class Trainer:
                 self._step += 1
 
                 if self._step % save_freq == 0:
-                    save_module = model
-                    if weights_fn is not None:
-                        save_module = weights_fn()
-                    elif isinstance(model, nn.DataParallel):
-                        save_module = model.module
-                    torch.save(save_module, self._save_fname + '-{}.pt'.format(self._step))
+                    if save_fn is not None:
+                        save_fn(self._save_fname, self._step)
+                    else:
+                        save_module = model
+                        if weights_fn is not None:
+                            save_module = weights_fn()
+                        elif isinstance(model, nn.DataParallel):
+                            save_module = model.module
+                        torch.save(save_module, self._save_fname + '-{}.pt'.format(self._step))
             scheduler.step(val_loss=vl_running_mean)
 
     @property

@@ -4,14 +4,29 @@ from hem.models import get_model, Trainer
 import torch.nn as nn
 import numpy as np
 import copy
+import os
+
+
+class _MocoQueue(nn.Module):
+    def __init__(self, dim, queue_size):
+        super().__init__()
+        self._moco_ptr = 0
+        moco_queue = torch.randn((dim, queue_size), dtype=torch.float32)
+        self.register_buffer('moco_queue',  moco_queue)
+
+    def append(self, last_k):
+        assert self.moco_queue.shape[1] % last_k.shape[1] == 0, "key shape must divide moco_queue!"
+        self.moco_queue[:,self._moco_ptr:self._moco_ptr+last_k.shape[1]] = last_k
+        self._moco_ptr = (self._moco_ptr + last_k.shape[1]) % self.moco_queue.shape[1]
 
 
 class _MoCoWrapper(nn.Module):
-    def __init__(self, mq, mk, alpha):
+    def __init__(self, mq, mk, alpha, queue_size):
         super().__init__()
         self._alpha = alpha
         self._mq = mq
         self._mk = mk
+        self._moco_queue = _MocoQueue(self._mq.dim, queue_size)
         for p_q, p_k in zip(mq.parameters(), mk.parameters()):
             p_k.data.mul_(0).add_(1, p_q.detach().data)
 
@@ -26,8 +41,16 @@ class _MoCoWrapper(nn.Module):
             for p_q, p_k in zip(self._mq.parameters(), self._mk.parameters()):
                 p_k.data.mul_(self._alpha).add_(1 - self._alpha, p_q.detach().data)
 
-    def wrapped_model(self):
-        return self._mq
+    def save_fn(self, save_path, step):
+        torch.save(self._mq, save_path  + '-{}.pt'.format(step))
+        torch.save(self._moco_queue, save_path  + '-queue-{}.pt'.format(step))
+
+    @property
+    def moco_queue(self):
+        return self._moco_queue.moco_queue
+    
+    def enqueue(self, last_k):
+        self._moco_queue.append(last_k)
 
 
 if __name__ == '__main__':
@@ -43,21 +66,18 @@ if __name__ == '__main__':
     # build main model
     model_class = get_model(config['model'].pop('type'))
     model = model_class(**config['model'])
-    moco_model = _MoCoWrapper(model, model_class(**config['model']), alpha)
+    moco_model = _MoCoWrapper(model, model_class(**config['model']), alpha, queue_size)
 
     # initialize queue
-    moco_queue = torch.randn((model.dim, queue_size), dtype=torch.float32).to(trainer.device)
-    moco_ptr, last_k = 0, None
+    last_k = None
 
     # build loss_fn
     cross_entropy = torch.nn.CrossEntropyLoss()
 
     def train_forward(model, device, b1, b2, hard_negatives=None):
-        global moco_queue, moco_ptr, temperature, last_k
+        global temperature, last_k
         if last_k is not None:
-            assert moco_queue.shape[1] % last_k.shape[1] == 0, "key shape must divide moco_queue!"
-            moco_queue[:,moco_ptr:moco_ptr+last_k.shape[1]] = last_k
-            moco_ptr = (moco_ptr + last_k.shape[1]) % moco_queue.shape[1]
+            model.enqueue(last_k)
 
         moco_model.momentum_update()
         labels = torch.zeros(b1.shape[0], dtype=torch.long).to(device)
@@ -70,7 +90,7 @@ if __name__ == '__main__':
         q, k = model(b1, b2[order])
         k = k[np.argsort(order)]
 
-        l_neg = torch.matmul(q, moco_queue)
+        l_neg = torch.matmul(q, model.moco_queue)
         if hard_negatives is not None:
             k, hn = k[:b1.shape[0]], k[b1.shape[0]:]
             l_neg = torch.cat((torch.matmul(q[:,None], hn[:,:,None])[:,0], l_neg), 1)
@@ -91,4 +111,4 @@ if __name__ == '__main__':
         rets = train_forward(model, device, b1, b2, hard_negatives)
         last_k = None
         return rets
-    trainer.train(moco_model, train_forward, moco_model.wrapped_model, val_fn=val_forward)
+    trainer.train(moco_model, train_forward, save_fn=moco_model.save_fn, val_fn=val_forward)
