@@ -212,7 +212,6 @@ class SyncedFramesDataset(PairedFrameDataset):
             agent_t = int(np.random.choice(agent_t)) if len(agent_t) else len(agent) - 1
             teacher_hard_neg = np.random.randint(min(teacher_grip_t + int(0.4 * self.TEACHER_TIME_MARGIN), len(teacher)))
 
-        a_t = agent_t
         agent_t = agent[agent_t]['obs']
         agent_hard_neg = []
         for t_prime in range(len(agent)):
