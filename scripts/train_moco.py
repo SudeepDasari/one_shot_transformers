@@ -77,7 +77,7 @@ if __name__ == '__main__':
     def train_forward(model, device, b1, b2, hard_negatives=None):
         global temperature, last_k
         if last_k is not None:
-            model.enqueue(last_k)
+            moco_model.enqueue(last_k)
 
         moco_model.momentum_update()
         labels = torch.zeros(b1.shape[0], dtype=torch.long).to(device)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
         q, k = model(b1, b2[order])
         k = k[np.argsort(order)]
 
-        l_neg = torch.matmul(q, model.moco_queue)
+        l_neg = torch.matmul(q, moco_model.moco_queue)
         if hard_negatives is not None:
             k, hn = k[:b1.shape[0]], k[b1.shape[0]:]
             l_neg = torch.cat((torch.matmul(q[:,None], hn[:,:,None])[:,0], l_neg), 1)
