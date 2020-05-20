@@ -30,6 +30,7 @@ embedding:
 
 goal_state:
   type: attention goal state
+  temperature: 5
 
 policy:
   discrete_actions: False
