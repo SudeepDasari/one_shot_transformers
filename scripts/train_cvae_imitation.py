@@ -16,9 +16,9 @@ if __name__ == '__main__':
         images = traj['images'][:,:-1].to(device) 
         context = context.to(device)
 
-        (mu, sigma_inv, alpha), (posterior, prior) = m(states, images, context, actions, ret_dist=False)
+        (mu, sigma_inv, alpha), kl = m(states, images, context, actions, ret_dist=False)
         action_distribution = GMMDistribution(mu, sigma_inv, alpha)
-        kl = torch.mean(torch.distributions.kl.kl_divergence(posterior, prior))
+        kl = torch.mean(kl)
         neg_ll = torch.mean(-action_distribution.log_prob(actions))
         loss = neg_ll + config['kl_beta'] * kl
 

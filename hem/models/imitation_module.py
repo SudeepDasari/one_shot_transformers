@@ -67,6 +67,7 @@ class LatentImitation(nn.Module):
         goal_latent = prior.rsample()
         posterior = self._posterior(states, actions) if actions is not None else prior
 
+        import pdb; pdb.set_trace()
         if self.training:
             assert actions is not None
             sa_latent = posterior.rsample()
@@ -80,4 +81,4 @@ class LatentImitation(nn.Module):
         mu, sigma_inv, alpha = self._mdn(pred_embeds.transpose(0, 1))
         if ret_dist:
             return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
-        return (mu, sigma_inv, alpha), (posterior, prior)
+        return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior)
