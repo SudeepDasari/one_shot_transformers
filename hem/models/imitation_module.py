@@ -69,7 +69,7 @@ class LatentImitation(nn.Module):
             assert actions is not None
             posterior = self._posterior(states, actions)
             sa_latent = posterior.rsample()
-            kl = torch.mean(torch.distributions.kl.kl_divergence(posterior, prior))
+            kl = torch.distributions.kl.kl_divergence(posterior, prior)
         else:
             sa_latent = prior.rsample()
         

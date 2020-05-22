@@ -19,6 +19,7 @@ if __name__ == '__main__':
         context = context.to(device)
 
         (mu, sigma_inv, alpha), kl = m(states, images, context, actions)
+        kl = torch.mean(kl)
         neg_ll = mdn_log_prob(actions, mu, sigma_inv, alpha)
         loss = neg_ll + config['kl_beta'] * kl
 
