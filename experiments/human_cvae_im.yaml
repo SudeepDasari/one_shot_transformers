@@ -38,4 +38,3 @@ policy:
   action_lstm:
     in_dim: 201
     out_dim: 64
-  

@@ -43,6 +43,7 @@ class _Posterior(nn.Module):
         covar = torch.diag_embed(torch.exp(ln_var))
         return MultivariateNormal(mean, covar)
 
+
 class LatentImitation(nn.Module):
     def __init__(self, config):
         super().__init__()
