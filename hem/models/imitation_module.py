@@ -1,5 +1,5 @@
 from hem.models import get_model, Trainer
-from hem.models.mdn_loss import MixtureDensityTop
+from hem.models.mdn_loss import MixtureDensityTop, GMMDistribution
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -65,11 +65,11 @@ class LatentImitation(nn.Module):
 
         prior = self._prior(states[:,0], context_embed)
         goal_latent = prior.rsample()
+        posterior = self._posterior(states, actions) if actions is not None else prior
+
         if self.training:
             assert actions is not None
-            posterior = self._posterior(states, actions)
             sa_latent = posterior.rsample()
-            kl = torch.distributions.kl.kl_divergence(posterior, prior)
         else:
             sa_latent = prior.rsample()
         
@@ -77,8 +77,5 @@ class LatentImitation(nn.Module):
         lstm_in = torch.cat((lstm_in, states.transpose(0, 1)), 2)
         self._action_lstm.flatten_parameters()
         pred_embeds, _ = self._action_lstm(lstm_in)
-        pred_mixtures = self._mdn(pred_embeds.transpose(0, 1))
-
-        if self.training:
-            return pred_mixtures, kl
-        return pred_mixtures
+        mu, sigma_inv, alpha = self._mdn(pred_embeds.transpose(0, 1))
+        return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)

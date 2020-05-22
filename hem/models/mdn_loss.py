@@ -38,32 +38,43 @@ class MixtureDensityLoss(nn.Module):
         return mixture_density_loss(real, mean, sigma_inv, alpha, self._eps)
 
 
-class MixtureDensitySampler:
-    def __init__(self, model):
-        self._mdn_model = model
+class GMMDistribution(torch.distributions.Distribution):
+    def __init__(self, mean, sigma_inv, alpha, validate_args=None):
+        assert mean.device == sigma_inv.device and mean.device == alpha.device, "all tensors must lie on same device!"
+        batch_shape, event_shape = sigma_inv.shape[:-1], mean.shape[-1:]
+        super().__init__(batch_shape, event_shape,validate_args)
+        self._n_mix = mean.shape[-2]
+        self._mean = mean
+        self._sigma_inv = sigma_inv
+        self._alpha = alpha
     
-    def forward(self, inputs, n_samples=1):
+    def sample(self, sample_shape=torch.Size()):
+        alpha_sampler = torch.distributions.Categorical(probs=self._alpha)
         with torch.no_grad():
-            mean, sigma_inv, alpha = self._mdn_model(*inputs)[:3]
-        if len(alpha.shape) == 3:
-            mean, sigma_inv, alpha = mean[:,-1], sigma_inv[:,-1], alpha[:,-1]
+            sample_alphas = alpha_sampler.sample(sample_shape)
+            index, pad = [], [1 for _ in range(len(sample_shape))]
+            for i, b in enumerate(self._batch_shape):
+                ind_shape = pad + [1 if j != i else b for j in range(len(self._batch_shape))]
+                index.append(torch.arange(b).view(ind_shape))
+            index.append(sample_alphas)
+            mean = self._mean[index]
+            sigma_inv = self._sigma_inv[index]
+            samples = torch.randn(self._extended_shape(sample_shape)).to(self._mean.device) / sigma_inv.unsqueeze(-1) + mean
+        return samples
 
-        if n_samples == 0:
-            chosen = np.argmax(alpha.cpu().numpy(), axis=1)
-            return mean.cpu().numpy()[np.arange(mean.shape[0]), chosen]
-
-        actions = []
-        for m, s_inv, a in zip(mean.cpu().numpy(), sigma_inv.cpu().numpy(), alpha.cpu().numpy()):
-            lk, ac = float('-inf'), None
-            for _ in range(n_samples):
-                chosen = np.random.choice(a.shape[-1], p=a)
-                ac_s = np.random.normal(size=m.shape[-1]) / s_inv[chosen] + m[chosen]
-                l_s = np.exp(-np.sum(np.square(m[chosen] - ac_s)) * s_inv[chosen]) * s_inv[chosen] * a[chosen] / np.power(2 * np.pi, 0.5 * m.shape[-1])
-                if l_s > lk:
-                    lk = l_s
-                    ac = ac_s
-            actions.append(ac[None])
-        return np.concatenate(actions, 0)
+    @property
+    def mean(self):
+        return torch.sum(self._mean * self._alpha.unsqueeze(-1), -2)
     
-    def __call__(self, inputs, n_samples=1):
-        return self.forward(inputs, n_samples)
+    def log_prob(self, value, eps=1e-5):
+        assert value.shape[-(len(self._batch_shape) + len(self._event_shape)):] == self._batch_shape + self._event_shape, "shapes must match!"
+        C = self._event_shape[0]
+        pad_shape = torch.Size([-1]) + self._batch_shape + self._event_shape
+
+        mean, alpha, sigma_inv = self._mean[None], self._alpha[None], self._sigma_inv[None]
+        exp_term = -0.5 * torch.sum(((value.view(pad_shape).unsqueeze(-2) - mean) ** 2), -1) * (sigma_inv ** 2)
+        ln_frac_term = torch.log(alpha * sigma_inv + eps) - 0.5 * C * np.log(2 * np.pi)
+        log_prob = torch.logsumexp(ln_frac_term + exp_term, -1)
+        if len(value.shape) == len(self._batch_shape + self._event_shape):
+            return log_prob[0]
+        return log_prob
