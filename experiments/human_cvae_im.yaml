@@ -1,0 +1,41 @@
+batch_size: 20
+lr: 0.0002
+epochs: 2000
+loader_workers: 16
+kl_beta: 0.1
+log_freq: 50
+
+
+dataset:
+  type: "imitation"
+  root_dir: ${REPO_DIR}
+  height: 170
+  width: 226
+  T_context: 3
+  T_pair: 20
+  freq: 2
+  sample_sides: True
+  color_jitter: [0.1, 0.25, 0.25]
+  rand_crop: [10, 10]
+  state_spec: ['ee_aa', 'gripper_qpos', 'object_detected']
+  action_spec: ['ee_aa', 'gripper_qpos']
+
+policy:
+  adim: 8
+  n_mixtures: 5
+  latent_dim: 32
+  image_embedding:
+    type: 'simple'
+  prior:
+    state_dim: 137
+    context_dim: 128
+    T: 3
+  posterior:
+    in_dim: 145
+    rnn_dim: 64
+    bidirectional: True
+
+  action_lstm:
+    in_dim: 201
+    out_dim: 64
+  

@@ -190,3 +190,44 @@ class VGGFeats(nn.Module):
     @property
     def dim(self):
         return self._out_dim
+
+
+class _BottleneckConv(nn.Module):
+    def __init__(self, in_dim, out_dim, feed_forward):
+        super().__init__()
+        self._c1 = nn.Conv2d(in_dim, feed_forward, 1, stride=1, padding=0)
+        self._a1 = nn.ReLU(inplace=True)
+        self._c2 = nn.Conv2d(feed_forward, feed_forward, 3, stride=1, padding=1)
+        self._a2 = nn.ReLU(inplace=True)
+        self._c3 = nn.Conv2d(feed_forward, out_dim, 1, stride=1, padding=0)
+        self._n = nn.InstanceNorm2d(out_dim)
+        self._residual = in_dim == out_dim
+
+    def forward(self, x):
+        inter = self._c3(self._a2(self._c2(self._a1(self._c1(x)))))
+        if self._residual:
+            return self._n(x + inter)
+        return self._n(x)
+
+
+class SimpleSpatialSoftmax(nn.Module):
+    def __init__(self, added_convs=3, n_out=128):
+        super().__init__()
+        vgg_feats =list( models.vgg16(pretrained=True).features[:16].children())
+        added_feats = [_BottleneckConv(256, 256, 64) for _ in range(added_convs)]
+        self._conv_stack = nn.Sequential(*(vgg_feats + added_feats))
+        self._out = nn.Sequential(nn.Linear(512, 512), nn.ReLU(512), nn.Linear(512, n_out))
+
+    def forward(self, x):
+        reshaped = len(x.shape) == 5
+        if reshaped:
+            B, T, C, H, W = x.shape
+            x = x.view((B * T, C, H, W))
+        x = self._conv_stack(x)
+        x = F.softmax(x.view((B*T, x.shape[1], -1)), dim=2).view((B*T, x.shape[1], x.shape[2], x.shape[3]))
+        h = torch.sum(torch.linspace(-1, 1, x.shape[2]).view((1, 1, -1)).to(x.device) * torch.sum(x, 3), 2)
+        w = torch.sum(torch.linspace(-1, 1, x.shape[3]).view((1, 1, -1)).to(x.device) * torch.sum(x, 2), 2)
+        x = torch.cat((h, w), 1)
+        if reshaped:
+            x = x.view((B, T, 512))
+        return self._out(x)

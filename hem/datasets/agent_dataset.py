@@ -15,7 +15,7 @@ from hem.datasets.util import split_files
 
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
-                 T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None,
+                 T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None):
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or T_pair > 0, "Must return (s,a) pairs or context!"
@@ -46,6 +46,7 @@ class AgentDemonstrations(Dataset):
         self._rand_gray = rand_gray
         self._normalize = normalize
         self._append_s0 = append_s0
+        self._sample_sides = sample_sides
 
     def __len__(self):
         return len(self._files)
@@ -81,6 +82,10 @@ class AgentDemonstrations(Dataset):
         frames = []
         for i in range(self._T_context):
             n = clip(np.random.randint(int(i * per_bracket), int((i + 1) * per_bracket)))
+            if self._sample_sides and i == 0:
+                n = 0
+            elif self._sample_sides and i == self._T_context - 1:
+                n = len(traj) - 1
             frames.append(_make_frame(n))
         frames = np.concatenate(frames, 0)
         frames = randomize_video(frames, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)

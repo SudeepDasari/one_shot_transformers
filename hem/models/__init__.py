@@ -26,4 +26,7 @@ def get_model(name):
     elif name == 'goal state':
         from .traj_embed import GoalState
         return GoalState
+    elif name == 'simple':
+        from .basic_embedding import SimpleSpatialSoftmax
+        return SimpleSpatialSoftmax
     raise NotImplementedError
