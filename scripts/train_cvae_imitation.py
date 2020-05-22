@@ -23,7 +23,7 @@ if __name__ == '__main__':
         loss = neg_ll + config['kl_beta'] * kl
 
         stats = {'neg_ll': neg_ll.item(), 'kl': kl.item()}
-        mean_ac = action_distribution.detach().mean.cpu().numpy()
+        mean_ac = action_distribution.mean.detach().cpu().numpy()
         for d in range(actions.shape[2]):
             stats['l1_{}'.format(d)] = np.mean(np.abs(mean_ac[:,:,d] - actions.cpu().numpy()[:,:,d]))
         return loss, stats

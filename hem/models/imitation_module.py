@@ -67,7 +67,6 @@ class LatentImitation(nn.Module):
         goal_latent = prior.rsample()
         posterior = self._posterior(states, actions) if actions is not None else prior
 
-        import pdb; pdb.set_trace()
         if self.training:
             assert actions is not None
             sa_latent = posterior.rsample()

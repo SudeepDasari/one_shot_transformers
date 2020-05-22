@@ -94,7 +94,9 @@ class Trainer:
                         val_inputs = next(val_iter)
 
                     with torch.no_grad():
+                        model = model.eval()
                         val_loss, val_stats = val_fn(model, self._device, *val_inputs)
+                        model = model.train()
                         val_loss = self._loss_to_scalar(val_loss)
 
                     # update running mean stat
