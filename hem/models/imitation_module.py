@@ -58,7 +58,7 @@ class LatentImitation(nn.Module):
         self._action_lstm = nn.LSTM(config['action_lstm']['in_dim'], config['action_lstm']['out_dim'], config['action_lstm'].get('n_layers', 1))
         self._mdn = MixtureDensityTop(config['action_lstm']['out_dim'], config['adim'], config['n_mixtures'])
     
-    def forward(self, states, images, context, actions=None):
+    def forward(self, states, images, context, actions=None, ret_dist=True):
         img_embed = self._embed(images)
         context_embed = self._embed(context)
         states = torch.cat((img_embed, states), 2)
@@ -78,4 +78,6 @@ class LatentImitation(nn.Module):
         self._action_lstm.flatten_parameters()
         pred_embeds, _ = self._action_lstm(lstm_in)
         mu, sigma_inv, alpha = self._mdn(pred_embeds.transpose(0, 1))
-        return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
+        if ret_dist:
+            return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
+        return (mu, sigma_inv, alpha), (posterior, prior)

@@ -1,7 +1,7 @@
 import torch
 from hem.models.imitation_module import LatentImitation
 from hem.models import Trainer
-from hem.models.mdn_loss import MixtureDensityLoss, GMMDistribution
+from hem.models.mdn_loss import GMMDistribution
 import numpy as np
 
 
@@ -11,14 +11,13 @@ if __name__ == '__main__':
     
     # build Imitation Module and MDN Loss
     action_model = LatentImitation(config['policy'])
-    mdn_log_prob = MixtureDensityLoss()
-
     def forward(m, device, context, traj):
         states, actions = traj['states'][:,:-1].to(device), traj['actions'].to(device)
         images = traj['images'][:,:-1].to(device) 
         context = context.to(device)
 
-        action_distribution, (posterior, prior) = m(states, images, context, actions)
+        (mu, sigma_inv, alpha), (posterior, prior) = m(states, images, context, actions, ret_dist=False)
+        action_distribution = GMMDistribution(mu, sigma_inv, alpha)
         kl = torch.mean(torch.distributions.kl.kl_divergence(posterior, prior))
         neg_ll = torch.mean(-action_distribution.log_prob(actions))
         loss = neg_ll + config['kl_beta'] * kl
