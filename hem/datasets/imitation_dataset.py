@@ -16,7 +16,7 @@ class _AgentDatasetNoContext(AgentDemonstrations):
 
 
 class ImitationDataset(Dataset):
-    def __init__(self, root_dir, mode='train', split=[0.9, 0.1], before_grip=False, **params):
+    def __init__(self, root_dir, mode='train', split=[0.9, 0.1], before_grip=False, recenter_actions=False, **params):
         self._root = os.path.expanduser(root_dir)
         mappings_file = os.path.join(self._root, 'mappings.json')
         with open(mappings_file, 'r') as f:
@@ -28,6 +28,7 @@ class ImitationDataset(Dataset):
         self._teacher_dataset = TeacherDemonstrations(files=[], **params)
         self._agent_dataset = _AgentDatasetNoContext(files=[], **params)
         self._before_grip = before_grip
+        self._recenter_actions = recenter_actions
 
     def __len__(self):
         return len(self._teacher_files)
@@ -58,4 +59,8 @@ class ImitationDataset(Dataset):
         else:
             agent_pairs, _ = self._agent_dataset.proc_traj(agent_traj)
         agent_pairs['grip_location'], agent_pairs['drop_location'] = grip, drop
+
+        if self._recenter_actions:
+            agent_pairs['actions'][:,:3] -= np.array([0.65, 0.06, 0.15]).reshape((1, -1)).astype(np.float32)
+            agent_pairs['actions'][:,:3] /= np.array([0.2, 0.41, 0.3166]).reshape((1, -1)).astype(np.float32)
         return self._teacher_dataset.proc_traj(teacher_traj), agent_pairs

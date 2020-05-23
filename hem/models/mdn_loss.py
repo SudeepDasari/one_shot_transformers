@@ -77,3 +77,14 @@ class GMMDistribution(torch.distributions.Distribution):
         if len(value.shape) == len(self._batch_shape + self._event_shape):
             return log_prob[0]
         return log_prob
+
+    @property
+    def highest_mean(self):
+        peaks = torch.argmax(self._alpha, -1)
+
+        index = []
+        for i, b in enumerate(self._batch_shape):
+            ind_shape = [1 if j != i else b for j in range(len(self._batch_shape))]
+            index.append(torch.arange(b).view(ind_shape))
+        index.append(peaks)
+        return self._mean[index]
