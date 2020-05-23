@@ -51,6 +51,7 @@ class LatentImitation(nn.Module):
         embed = get_model(config['image_embedding'].pop('type'))
         self._embed = embed(**config['image_embedding'])
 
+        self._concat_state = config.get('concat_state', True)
         latent_dim = config['latent_dim']
         self._prior = _Prior(latent_dim=latent_dim, **config['prior'])
         self._posterior = _Posterior(latent_dim=latent_dim, **config['posterior'])
@@ -62,7 +63,7 @@ class LatentImitation(nn.Module):
     def forward(self, states, images, context, actions=None, ret_dist=True):
         img_embed = self._embed(images)
         context_embed = self._embed(context)
-        states = torch.cat((img_embed, states), 2)
+        states = torch.cat((img_embed, states), 2) if self._concat_state else img_embed
 
         prior = self._prior(states[:,0], context_embed)
         goal_latent = prior.rsample()
