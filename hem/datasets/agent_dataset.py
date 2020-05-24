@@ -98,6 +98,8 @@ class AgentDemonstrations(Dataset):
             o = t['obs']
             if k == 'ee_aa' and 'ee_aa' not in o:
                 ee, axis_angle = o['ee_pos'][:3], o['axis_angle']
+                if axis_angle[0] < 0:
+                    axis_angle[0] += 2
                 o = np.concatenate((ee, axis_angle)).astype(np.float32)
             else:
                 o = o[k]
@@ -105,6 +107,8 @@ class AgentDemonstrations(Dataset):
         
         state_keys, action_keys = self._state_action_spec
         ret_dict = {'images': [], 'states': [], 'actions': []}
+        if self._depth:
+            ret_dict['depth'] = []
         if end is None:
             end = len(traj)
         start = np.random.randint(0, max(1, end - self._T_pair * self._freq))
@@ -114,7 +118,9 @@ class AgentDemonstrations(Dataset):
 
         for j, t in enumerate(chosen_t):
             t = traj.get(t)
-
+            if self._depth:
+                depth_img = self._crop_and_resize(t['obs']['depth']).transpose((2, 0, 1))[None]
+                ret_dict['depth'].append(depth_img)
             ret_dict['images'].append(self._crop_and_resize(t['obs']['image'])[None])
             state = []
             for k in state_keys:

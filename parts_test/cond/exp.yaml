@@ -1,0 +1,30 @@
+batch_size: 3
+lr: 0.01
+epochs: 2000
+loader_workers: 16
+log_freq: 50
+
+lr_schedule:
+  type: ExponentialDecay
+  rate: 0.95
+
+dataset:
+  before_grip: True
+  recenter_actions: True
+  type: "imitation"
+  root_dir: ${REPO_DIR}
+  height: 240
+  width: 320
+  depth: True
+  T_context: 3
+  T_pair: 1
+  freq: 9
+  sample_sides: True
+  color_jitter: [0.1, 0.25, 0.25]
+  rand_crop: [10, 10]
+  state_spec: ['ee_aa', 'gripper_qpos', 'object_detected']
+  action_spec: ['ee_aa', 'gripper_qpos']
+
+conf:
+  n_nonloc: 1
+  points: 32

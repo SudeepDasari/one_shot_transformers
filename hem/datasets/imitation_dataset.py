@@ -61,6 +61,11 @@ class ImitationDataset(Dataset):
         agent_pairs['grip_location'], agent_pairs['drop_location'] = grip, drop
 
         if self._recenter_actions:
-            agent_pairs['actions'][:,:3] -= np.array([0.65, 0.06, 0.15]).reshape((1, -1)).astype(np.float32)
-            agent_pairs['actions'][:,:3] /= np.array([0.2, 0.41, 0.3166]).reshape((1, -1)).astype(np.float32)
+            mean = np.array([0.647, 0.0308, 0.10047, 1, 0.1464, 0.1464, 0.010817]).reshape((1, -1))
+            std = np.array([0.231, 0.447, 0.28409, 0.04, 0.854, 0.854, 0.0653]).reshape((1, -1))
+            agent_pairs['actions'][:,:7] -= mean.astype(np.float32)
+            agent_pairs['actions'][:,:7] /= std.astype(np.float32)
+            for k in ('grip_location', 'drop_location'):
+                agent_pairs[k] -= mean[0]
+                agent_pairs[k] /= std[0]
         return self._teacher_dataset.proc_traj(teacher_traj), agent_pairs
