@@ -26,17 +26,6 @@ class _Prior(nn.Module):
         return MultivariateNormal(mean, covar)
 
 
-class _DebugPrior(nn.Module):
-    def __init__(self, latent_dim, state_dim, context_dim, T):
-        super().__init__()
-        self._l_dim = latent_dim
-    
-    def forward(self, s_0, context):
-        mean = torch.zeros((s_0.shape[0], self._l_dim)).to(s_0.device)
-        covar = torch.diag_embed(torch.ones((s_0.shape[0], self._l_dim))).to(s_0.device)
-        return MultivariateNormal(mean, covar)
-
-
 class _Posterior(nn.Module):
     def __init__(self, latent_dim, in_dim, n_layers=1, rnn_dim=128, bidirectional=False):
         super().__init__()
@@ -64,7 +53,7 @@ class LatentImitation(nn.Module):
 
         self._concat_state = config.get('concat_state', True)
         latent_dim = config['latent_dim']
-        self._prior = _DebugPrior(latent_dim=latent_dim, **config['prior'])
+        self._prior = _Prior(latent_dim=latent_dim, **config['prior'])
         self._posterior = _Posterior(latent_dim=latent_dim, **config['posterior'])
 
         # action processing
@@ -84,8 +73,7 @@ class LatentImitation(nn.Module):
             assert actions is not None
             sa_latent = posterior.rsample()
         else:
-            # !!!!!!!FIX AFTER DEBUG!!!!! sample from posterior for now while using DEBUG PRIOR
-            sa_latent = posterior.rsample()
+            sa_latent = prior.rsample()
         
         lstm_in = torch.cat((sa_latent, goal_latent), 1)[None].repeat((states.shape[1], 1, 1))
         lstm_in = torch.cat((lstm_in, states.transpose(0, 1)), 2)
