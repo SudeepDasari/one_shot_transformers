@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import MultivariateNormal
+import numpy as np
 
 
 class _Prior(nn.Module):
@@ -34,11 +35,17 @@ class _Posterior(nn.Module):
         self._out = nn.Linear(mult * 2 * rnn_dim, latent_dim * 2)
         self._l_dim = latent_dim
 
-    def forward(self, states, actions):
+    def forward(self, states, actions, lens=None):
         sa = torch.cat((states, actions), 2).transpose(0, 1)
+        sa = torch.nn.utils.rnn.pack_padded_sequence(sa, lens, enforce_sorted=False) if lens is not None else sa
         self._rnn.flatten_parameters()
         rnn_out, _ = self._rnn(sa)
-        mean_ln_var = self._out(torch.cat((rnn_out[0], rnn_out[1]), 1))
+        if lens is not None:
+            rnn_out, _ = torch.nn.utils.rnn.pad_packed_sequence(rnn_out)
+            front, back = rnn_out[0], rnn_out[lens-1, range(lens.shape[0])]
+        else:
+            front, back = rnn_out[0], rnn_out[1]
+        mean_ln_var = self._out(torch.cat((front, back), 1))
         mean, ln_var = mean_ln_var[:,:self._l_dim], mean_ln_var[:,self._l_dim:]
         covar = torch.diag_embed(torch.exp(ln_var))
         return MultivariateNormal(mean, covar)
@@ -83,3 +90,61 @@ class LatentImitation(nn.Module):
         if ret_dist:
             return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
         return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior)
+
+
+class _NormalPrior(nn.Module):
+    def __init__(self, latent_dim):
+        super().__init__()
+        self._l_dim = latent_dim
+    
+    def forward(self, states, context):
+        mean = torch.zeros((states.shape[0], self._l_dim)).to(states.device)
+        covar = torch.diag_embed(torch.ones((states.shape[0], self._l_dim))).to(states.device)
+        return MultivariateNormal(mean, covar)
+
+
+class LatentStateImitation(nn.Module):
+    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000):
+        super().__init__()
+        self._prior = _NormalPrior(latent_dim=latent_dim)
+        self._posterior = _Posterior(latent_dim, sdim + adim, n_layers=post_rnn_layers, rnn_dim=post_rnn_dim, bidirectional=post_bidirect)
+
+        # action processing
+        self._action_lstm = nn.LSTM(sdim + latent_dim, lstm_dim, n_layers)
+        self._mdn = MixtureDensityTop(lstm_dim, adim, n_mixtures)
+        assert ss_ramp > 0, 'must be non neg'
+        self._t, self._ramp, self._ss_dim = 0, ss_ramp, ss_dim
+
+    def forward(self, states, actions=None, lens=None, ret_dist=True, use_ss=False):
+        prior = self._prior(states, None)
+        posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
+        sa_latent = posterior.rsample()
+        
+        self._action_lstm.flatten_parameters()
+        hidden, ss_p = None, min(self._t / float(self._ramp), 1)
+        pred, last_acs = [], None
+        for t in range(states.shape[1]):
+            if t == 0 or (not self.training and not use_ss):
+                in_t = torch.cat((states[:,t], sa_latent), 1)
+            else:
+                select = [np.random.choice(2, p=[1-ss_p, ss_p]) for _ in range(states.shape[0])]
+                prefixes = torch.cat((states[:,t,:self._ss_dim][None], last_acs[None,:,:self._ss_dim]), 0)
+                prefixes = prefixes[select, range(states.shape[0])]
+                in_state = torch.cat((prefixes, states[:,t,self._ss_dim:]), 1)
+                in_t = torch.cat((in_state, sa_latent), 1)
+
+            out, hidden = self._action_lstm(in_t[None], hidden)
+            mu_t, sigma_t, alpha_t = self._mdn(out)
+            pred.append((mu_t.transpose(0, 1), sigma_t.transpose(0, 1), alpha_t.transpose(0, 1)))
+
+            if self.training or use_ss:
+                dist_t = GMMDistribution(mu_t[0].detach(), sigma_t[0].detach(), alpha_t[0].detach())
+                last_acs = dist_t.sample()
+        
+        if self.training:
+            self._t += 1
+
+        mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
+        if ret_dist:
+            return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
+        return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior), ss_p

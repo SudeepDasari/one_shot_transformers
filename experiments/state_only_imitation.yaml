@@ -1,0 +1,17 @@
+batch_size: 64
+lr: 0.001
+epochs: 2000
+loader_workers: 5
+kl_beta: 1
+log_freq: 50
+
+dataset:
+  type: "states"
+  state_file: ${SA_FILE}
+
+policy:
+  adim: 8
+  sdim: 9
+  n_mixtures: 3
+  latent_dim: 32
+  n_layers: 2

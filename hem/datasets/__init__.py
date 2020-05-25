@@ -33,6 +33,9 @@ def get_dataset(name):
     elif name == 'imitation':
         from .imitation_dataset import ImitationDataset
         return ImitationDataset
+    elif name == 'states':
+        from .imitation_dataset import StateDataset
+        return StateDataset
     raise NotImplementedError
 
 
