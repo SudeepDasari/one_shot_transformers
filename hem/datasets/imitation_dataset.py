@@ -109,4 +109,4 @@ class StateDataset(Dataset):
                 tensor[:,:7] -= mean.astype(np.float32)
                 tensor[:,:7] /= std.astype(np.float32)
         
-        return states, actions, x_len, loss_mask
+        return states, actions, x_len, loss_mask.astype(np.float32)
