@@ -117,11 +117,11 @@ class LatentStateImitation(nn.Module):
         assert ss_ramp > 0, 'must be non neg'
         self._t, self._ramp, self._ss_dim = 0, ss_ramp, ss_dim
 
-    def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False):
+    def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False, prev_latent=None):
         assert not force_ss or not force_no_ss, "both settings cannot be true!"
         prior = self._prior(states, None)
         posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
-        sa_latent = posterior.rsample()
+        sa_latent = posterior.rsample() if prev_latent is None else prev_latent
         
         self._action_lstm.flatten_parameters()
         hidden, ss_p = None, min(self._t / float(self._ramp), 1)
@@ -154,10 +154,10 @@ class LatentStateImitation(nn.Module):
         if self._mdn is not None:
             mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
             if ret_dist:
-                return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
+                return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior), prev_latent
             return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior), ss_p
 
         pred_acs = torch.cat(pred, 1)
         if ret_dist:
-            return pred_acs, (posterior, prior)
+            return pred_acs, (posterior, prior), prev_latent
         return pred_acs, torch.distributions.kl.kl_divergence(posterior, prior), ss_p
