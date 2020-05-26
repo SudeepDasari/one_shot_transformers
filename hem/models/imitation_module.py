@@ -111,11 +111,14 @@ class LatentStateImitation(nn.Module):
 
         # action processing
         self._action_lstm = nn.LSTM(sdim + latent_dim, lstm_dim, n_layers)
-        self._mdn = MixtureDensityTop(lstm_dim, adim, n_mixtures)
+        self._mdn = MixtureDensityTop(lstm_dim, adim, n_mixtures) if n_mixtures else None
+        if not n_mixtures:
+            self._ac_top = nn.Linear(lstm_dim, adim)
         assert ss_ramp > 0, 'must be non neg'
         self._t, self._ramp, self._ss_dim = 0, ss_ramp, ss_dim
 
-    def forward(self, states, actions=None, lens=None, ret_dist=True, use_ss=False):
+    def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False):
+        assert not force_ss or not force_no_ss, "both settings cannot be true!"
         prior = self._prior(states, None)
         posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
         sa_latent = posterior.rsample()
@@ -124,7 +127,7 @@ class LatentStateImitation(nn.Module):
         hidden, ss_p = None, min(self._t / float(self._ramp), 1)
         pred, last_acs = [], None
         for t in range(states.shape[1]):
-            if t == 0 or (not self.training and not use_ss):
+            if t == 0 or (not self.training and not force_ss) or force_no_ss:
                 in_t = torch.cat((states[:,t], sa_latent), 1)
             else:
                 select = [np.random.choice(2, p=[1-ss_p, ss_p]) for _ in range(states.shape[0])]
@@ -133,18 +136,28 @@ class LatentStateImitation(nn.Module):
                 in_state = torch.cat((prefixes, states[:,t,self._ss_dim:]), 1)
                 in_t = torch.cat((in_state, sa_latent), 1)
 
-            out, hidden = self._action_lstm(in_t[None], hidden)
-            mu_t, sigma_t, alpha_t = self._mdn(out)
-            pred.append((mu_t.transpose(0, 1), sigma_t.transpose(0, 1), alpha_t.transpose(0, 1)))
-
-            if self.training or use_ss:
-                dist_t = GMMDistribution(mu_t[0].detach(), sigma_t[0].detach(), alpha_t[0].detach())
-                last_acs = dist_t.sample()
+            lstm_out, hidden = self._action_lstm(in_t[None], hidden)
+            if self._mdn is not None:
+                mu_t, sigma_t, alpha_t = self._mdn(lstm_out)
+                pred.append((mu_t.transpose(0, 1), sigma_t.transpose(0, 1), alpha_t.transpose(0, 1)))
+                if self.training or force_ss:
+                    dist_t = GMMDistribution(mu_t[0].detach(), sigma_t[0].detach(), alpha_t[0].detach())
+                    last_acs = dist_t.sample()
+            else:
+                a_out = self._ac_top(lstm_out)
+                pred.append(a_out.transpose(0, 1))
+                last_acs = a_out.detach()[0]
         
         if self.training:
             self._t += 1
 
-        mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
+        if self._mdn is not None:
+            mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
+            if ret_dist:
+                return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
+            return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior), ss_p
+
+        pred_acs = torch.cat(pred, 1)
         if ret_dist:
-            return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
-        return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior), ss_p
+            return pred_acs, (posterior, prior)
+        return pred_acs, torch.distributions.kl.kl_divergence(posterior, prior), ss_p

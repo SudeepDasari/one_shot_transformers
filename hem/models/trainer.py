@@ -20,9 +20,12 @@ class Trainer:
         now = datetime.datetime.now()
         parser = argparse.ArgumentParser(description=description)
         parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
+        parser.add_argument('--save_path', type=str, default='', help='path to place model save file in during training (overwrites config)')
         parser.add_argument('--device', type=int, default=None, nargs='+', help='target device (uses all if not specified)')
         args = parser.parse_args()
         self._config = parse_basic_config(args.experiment_file)
+        if args.save_path:
+            self._config['save_path'] = args.save_path
 
         # initialize device
         def_device = 0 if args.device is None else args.device[0]
@@ -38,6 +41,7 @@ class Trainer:
 
         # set of file saving
         save_dir = os.path.join(self._config.get('save_path', './'), '{}_ckpt-{}-{}_{}-{}-{}'.format(save_name, now.hour, now.minute, now.day, now.month, now.year))
+        save_dir = os.path.expanduser(save_dir)
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         with open(os.path.join(save_dir, 'config.yaml'), 'w') as f:

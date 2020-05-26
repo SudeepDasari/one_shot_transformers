@@ -92,8 +92,8 @@ class StateDataset(Dataset):
         seq_len = np.random.randint(self._min_T, self._max_T)
         start = np.random.randint(len(all_actions) - seq_len + 1) if len(all_actions) >= seq_len else 0
 
-        states = all_states[start:start+seq_len]
-        actions = all_actions[start:start+seq_len]
+        states = all_states[start:start+seq_len].copy()
+        actions = all_actions[start:start+seq_len].copy()
         assert len(states) == len(actions), "action/state lengths don't match, bad striding?"
         x_len = len(actions)
         loss_mask = np.array([1 if i < x_len else 0 for i in range(self._max_T)])
@@ -106,7 +106,7 @@ class StateDataset(Dataset):
             mean = np.array([0.647, 0.0308, 0.10047, 1, 0.1464, 0.1464, 0.010817]).reshape((1, -1))
             std = np.array([0.231, 0.447, 0.28409, 0.04, 0.854, 0.854, 0.0653]).reshape((1, -1))
             for tensor in [states, actions]:
-                tensor[:,:7] -= mean.astype(np.float32)
-                tensor[:,:7] /= std.astype(np.float32)
+                tensor[:x_len,:7] -= mean.astype(np.float32)
+                tensor[:x_len,:7] /= std.astype(np.float32)
         
         return states, actions, x_len, loss_mask.astype(np.float32)

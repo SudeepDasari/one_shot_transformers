@@ -11,18 +11,36 @@ if __name__ == '__main__':
     
     # build Imitation Module and MDN Loss
     action_model = LatentStateImitation(**config['policy'])
+    l1_loss = torch.nn.SmoothL1Loss()
+
+    def get_kl_beta(config, step):
+        beta = config['kl_beta']
+        assert beta >=0
+        if 'kl_anneal' in config:
+            beta_0, start, end = config['kl_anneal']
+            assert end > start and beta_0 >= 0
+            alpha = min(max(float(step - start) / (end - start), 0), 1)
+            beta = (1 - alpha) * beta_0 + alpha * beta
+        return beta
+
     def forward(m, device, states, actions, x_len, loss_mask):
         states, actions, x_len, loss_mask = states.to(device), actions.to(device), x_len.to(device), loss_mask.to(device)
-        (mu, sigma_inv, alpha), kl, ss_p = m(states, actions, x_len, False, use_ss=True)
-        action_distribution = GMMDistribution(mu, sigma_inv, alpha)
-        kl = torch.mean(kl)
-        neg_ll = torch.sum(-action_distribution.log_prob(actions) * loss_mask / torch.sum(loss_mask))
-        loss = neg_ll + config['kl_beta'] * kl
+        pred_acs, kl, ss_p = m(states, actions, x_len, False, force_ss=True)
+        if len(pred_acs) == 3:
+            mu, sigma_inv, alpha = pred_acs
+            action_distribution = GMMDistribution(mu, sigma_inv, alpha)
+            recon_loss = torch.sum(-action_distribution.log_prob(actions) * loss_mask / torch.sum(loss_mask))
+            pred_acs = action_distribution.mean.detach().cpu().numpy()
+        else:
+            recon_loss = torch.sum(l1_loss(pred_acs, actions) * loss_mask / torch.sum(loss_mask))
+            pred_acs = pred_acs.detach().cpu().numpy()
 
-        stats = {'neg_ll': neg_ll.item(), 'kl': kl.item(), 'schedule_samp': ss_p}
-        mean_ac = action_distribution.mean.detach().cpu().numpy()
+        kl = torch.mean(kl)
+        kl_beta = get_kl_beta(config, trainer.step)
+        loss = recon_loss + kl_beta * kl
+        stats = {'recon_loss': recon_loss.item(), 'kl': kl.item(), 'schedule_samp': ss_p, 'kl_beta': kl_beta}
         real_ac, mask = actions.cpu().numpy(), loss_mask.cpu().numpy()
         for d in range(actions.shape[2]):
-            stats['l1_{}'.format(d)] = np.sum(np.abs(mean_ac[:,:,d] - real_ac[:,:,d]) * mask / np.sum(mask))
+            stats['l1_{}'.format(d)] = np.sum(np.abs(pred_acs[:,:,d] - real_ac[:,:,d]) * mask / np.sum(mask))
         return loss, stats        
     trainer.train(action_model, forward)
