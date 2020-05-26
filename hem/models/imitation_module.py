@@ -104,7 +104,7 @@ class _NormalPrior(nn.Module):
 
 
 class LatentStateImitation(nn.Module):
-    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000):
+    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000, aux_dim=0):
         super().__init__()
         self._prior = _NormalPrior(latent_dim=latent_dim)
         self._posterior = _Posterior(latent_dim, sdim + adim, n_layers=post_rnn_layers, rnn_dim=post_rnn_dim, bidirectional=post_bidirect)
@@ -116,6 +116,7 @@ class LatentStateImitation(nn.Module):
             self._ac_top = nn.Linear(lstm_dim, adim)
         assert ss_ramp > 0, 'must be non neg'
         self._t, self._ramp, self._ss_dim = 0, ss_ramp, ss_dim
+        self._aux = nn.Sequential(nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, aux_dim)) if aux_dim else None
 
     def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False, prev_latent=None):
         assert not force_ss or not force_no_ss, "both settings cannot be true!"
@@ -150,14 +151,15 @@ class LatentStateImitation(nn.Module):
         
         if self.training:
             self._t += 1
-
+        
+        aux_pred = self._aux(sa_latent) if self._aux is not None else None
         if self._mdn is not None:
             mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
             if ret_dist:
-                return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior), prev_latent
-            return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior), ss_p
+                return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior), sa_latent
+            return (mu, sigma_inv, alpha), (torch.distributions.kl.kl_divergence(posterior, prior), aux_pred), ss_p
 
         pred_acs = torch.cat(pred, 1)
         if ret_dist:
-            return pred_acs, (posterior, prior), prev_latent
-        return pred_acs, torch.distributions.kl.kl_divergence(posterior, prior), ss_p
+            return pred_acs, (posterior, prior), sa_latent
+        return pred_acs, (torch.distributions.kl.kl_divergence(posterior, prior), aux_pred), ss_p

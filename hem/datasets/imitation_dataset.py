@@ -92,6 +92,14 @@ class StateDataset(Dataset):
         seq_len = np.random.randint(self._min_T, self._max_T)
         start = np.random.randint(len(all_actions) - seq_len + 1) if len(all_actions) >= seq_len else 0
 
+        grip_pose = self._all_trajs[index]['states'][self._all_trajs[index]['grip_t'],:7].copy()[None]
+        drop_pose = self._all_trajs[index]['states'][self._all_trajs[index]['drop_t'],:7].copy()[None]
+        aux_mask = np.ones(14).astype(np.float32)
+        if not (start <= self._all_trajs[index]['grip_t'] < start + seq_len):
+            aux_mask[:7] *= 0
+        if not (start <= self._all_trajs[index]['drop_t'] < start + seq_len):
+            aux_mask[7:] *= 0
+
         states = all_states[start:start+seq_len].copy()
         actions = all_actions[start:start+seq_len].copy()
         assert len(states) == len(actions), "action/state lengths don't match, bad striding?"
@@ -105,8 +113,8 @@ class StateDataset(Dataset):
         if self._center:
             mean = np.array([0.647, 0.0308, 0.10047, 1, 0.1464, 0.1464, 0.010817]).reshape((1, -1))
             std = np.array([0.231, 0.447, 0.28409, 0.04, 0.854, 0.854, 0.0653]).reshape((1, -1))
-            for tensor in [states, actions]:
+            for tensor in [states, actions, grip_pose, drop_pose]:
                 tensor[:x_len,:7] -= mean.astype(np.float32)
                 tensor[:x_len,:7] /= std.astype(np.float32)
         
-        return states, actions, x_len, loss_mask.astype(np.float32)
+        return states, actions, x_len, loss_mask.astype(np.float32), np.concatenate((grip_pose[0], drop_pose[0])).astype(np.float32), aux_mask
