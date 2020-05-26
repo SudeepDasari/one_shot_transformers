@@ -28,7 +28,7 @@ if __name__ == '__main__':
         states, actions, x_len, loss_mask = states.to(device), actions.to(device), x_len.to(device), loss_mask.to(device)
         aux_loc, aux_mask = aux_loc.to(device), aux_mask.to(device)
 
-        pred_acs, (kl, aux), ss_p = m(states, actions, x_len, False, force_ss=True)
+        pred_acs, (kl, aux), ss_p = m(states, actions, x_len, False, force_ss=True, context=aux_loc)
         if len(pred_acs) == 3:
             mu, sigma_inv, alpha = pred_acs
             action_distribution = GMMDistribution(mu, sigma_inv, alpha)

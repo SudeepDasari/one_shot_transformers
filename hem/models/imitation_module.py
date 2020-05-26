@@ -103,10 +103,25 @@ class _NormalPrior(nn.Module):
         return MultivariateNormal(mean, covar)
 
 
-class LatentStateImitation(nn.Module):
-    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000, aux_dim=0):
+class _SimplePrior(nn.Module):
+    def __init__(self, in_dim, latent_dim):
         super().__init__()
-        self._prior = _NormalPrior(latent_dim=latent_dim)
+        self._prior_nn = nn.Sequential(nn.Linear(in_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True))
+        self._ln_var = nn.Linear(latent_dim, latent_dim)
+        self._mean = nn.Linear(latent_dim, latent_dim)
+    
+    def forward(self, states, context):
+        nn_in = torch.cat((states, context), 1)
+        p_latent = self._prior_nn(nn_in)
+        mean = self._mean(p_latent)
+        covar = torch.diag_embed(torch.exp(self._ln_var(p_latent)))
+        return MultivariateNormal(mean, covar)
+ 
+
+class LatentStateImitation(nn.Module):
+    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000, aux_dim=0, prior_dim=0):
+        super().__init__()
+        self._prior = _SimplePrior(prior_dim, latent_dim) if prior_dim else _NormalPrior(latent_dim=latent_dim)
         self._posterior = _Posterior(latent_dim, sdim + adim, n_layers=post_rnn_layers, rnn_dim=post_rnn_dim, bidirectional=post_bidirect)
 
         # action processing
@@ -118,9 +133,9 @@ class LatentStateImitation(nn.Module):
         self._t, self._ramp, self._ss_dim = 0, ss_ramp, ss_dim
         self._aux = nn.Sequential(nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, aux_dim)) if aux_dim else None
 
-    def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False, prev_latent=None):
+    def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False, prev_latent=None, context=None):
         assert not force_ss or not force_no_ss, "both settings cannot be true!"
-        prior = self._prior(states, None)
+        prior = self._prior(states[:,0], context)
         posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
         sa_latent = posterior.rsample() if prev_latent is None else prev_latent
         
