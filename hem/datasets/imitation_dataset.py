@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 from .agent_dataset import AgentDemonstrations
 from .teacher_dataset import TeacherDemonstrations
 from hem.datasets import load_traj
-from hem.datasets.util import randomize_video, split_files
+from hem.datasets.util import randomize_video, split_files, resize
 import torch
 import os
 import numpy as np
@@ -73,13 +73,14 @@ class ImitationDataset(Dataset):
 
 
 class StateDataset(Dataset):
-    def __init__(self, state_file, min_T=50, max_T=300, center=False, mode='train', split=[0.9, 0.1]):
+    def __init__(self, state_file, min_T=50, max_T=300, center=False, mode='train', split=[0.9, 0.1], ret_start_T=False):
         self._all_trajs = pkl.load(open(os.path.expanduser(state_file), 'rb'))
-        order = split_files(len(self._all_trajs), split, mode)
-        self._all_trajs = [self._all_trajs[o] for o in order]
+        self._order = split_files(len(self._all_trajs), split, mode)
+        self._all_trajs = [self._all_trajs[o] for o in self._order]
         self._min_T = min_T
         self._max_T = max_T
         self._center = center
+        self._ret_start_T = ret_start_T
     
     def __len__(self):
         return len(self._all_trajs)
@@ -117,4 +118,31 @@ class StateDataset(Dataset):
                 tensor[:x_len,:7] -= mean.astype(np.float32)
                 tensor[:x_len,:7] /= std.astype(np.float32)
         
+        if self._ret_start_T:
+            return states, actions, x_len, loss_mask.astype(np.float32), np.concatenate((grip_pose[0], drop_pose[0])).astype(np.float32), aux_mask, start
         return states, actions, x_len, loss_mask.astype(np.float32), np.concatenate((grip_pose[0], drop_pose[0])).astype(np.float32), aux_mask
+
+
+class StateDatasetVisionContext(StateDataset):
+    def __init__(self, state_file, img_dir, img_width=320, img_height=240, rand_crop=None, color_jitter=None, **kwargs):
+        super().__init__(state_file, ret_start_T=True, **kwargs)
+        self._img_dir = os.path.expanduser(img_dir)
+        self._img_height, self._img_width = img_height, img_width
+        self._human_grip_times = json.load(open(os.path.join(self._img_dir, 'human_grip_timings.json'), 'r'))
+        self._color_jitter = color_jitter
+        self._rand_crop = rand_crop
+    
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+        s, a, lens, lm, aux, auxm, start_T = super().__getitem__(index)
+
+        traj_ind = self._order[index]
+        robot_frame = load_traj(os.path.join(self._img_dir, 'traj{}_robot.pkl'.format(traj_ind)))[start_T]['obs']['image']
+        human_vid = load_traj(os.path.join(self._img_dir, 'traj{}_human.pkl'.format(traj_ind)))
+        start, end = human_vid[0]['obs']['image'], human_vid[len(human_vid) - 1]['obs']['image']
+        mid = human_vid[self._human_grip_times['traj{}_human.pkl'.format(traj_ind)]]['obs']['image']
+
+        context = [resize(i, (self._img_width, self._img_height), False) for i in (robot_frame, start, mid, end)]
+        context = randomize_video(context, color_jitter=self._color_jitter, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
+        return s, a, lens, lm, aux, auxm, context

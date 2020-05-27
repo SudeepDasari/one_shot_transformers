@@ -36,6 +36,9 @@ def get_dataset(name):
     elif name == 'states':
         from .imitation_dataset import StateDataset
         return StateDataset
+    elif name == 'states imcontext':
+        from .imitation_dataset import StateDatasetVisionContext
+        return StateDatasetVisionContext
     raise NotImplementedError
 
 

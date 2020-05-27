@@ -70,7 +70,7 @@ class _NonLocalLayer(nn.Module):
         K, Q, V = [t.reshape((B, C, T*H*W)) for t in (K, Q, V)]
         KQ = torch.matmul(K.transpose(1, 2), Q)
         attn = F.softmax(KQ / self._temperature, 2)
-        V = torch.sum(V.unsqueeze(-1) * attn[:,None], 3).reshape((B, C, T, H, W))
+        V = torch.matmul(V, attn.transpose(1, 2)).reshape((B, C, T, H, W))
         return self._norm(inputs + self._drop1(self._a1(self._out(V))))
 
 

@@ -54,14 +54,15 @@ class Trainer:
     def config(self):
         return copy.deepcopy(self._config)
 
-    def train(self, model, train_fn, weights_fn=None, val_fn=None, save_fn=None):
+    def train(self, model, train_fn, weights_fn=None, val_fn=None, save_fn=None, optim_weights=None):
         # wrap model in DataParallel if needed and transfer to correct device
         if self.device_count > 1:
             model = nn.DataParallel(model, device_ids=self.device_list)
         model = model.to(self._device)
         
         # initializer optimizer and lr scheduler
-        optimizer, scheduler = self._build_optimizer_and_scheduler(model)
+        optim_weights = optim_weights if optim_weights is not None else model.parameters()
+        optimizer, scheduler = self._build_optimizer_and_scheduler(optim_weights)
 
         # initialize constants:
         epochs = self._config.get('epochs', 1)
@@ -149,8 +150,8 @@ class Trainer:
     def device(self):
         return copy.deepcopy(self._device)
 
-    def _build_optimizer_and_scheduler(self, model):
-        optimizer = torch.optim.Adam(model.parameters(), self._config['lr'], weight_decay=self._config.get('weight_decay', 0))
+    def _build_optimizer_and_scheduler(self, optim_weights):
+        optimizer = torch.optim.Adam(optim_weights, self._config['lr'], weight_decay=self._config.get('weight_decay', 0))
         return optimizer, build_scheduler(optimizer, self._config.get('lr_schedule', {}))
 
     def _step_optim(self, loss, step, optimizer):
