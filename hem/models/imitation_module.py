@@ -143,19 +143,21 @@ class _VidPrior(nn.Module):
 
 
 class LatentStateImitation(nn.Module):
-    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000, aux_dim=0, prior_dim=0):
+    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000, aux_dim=0, prior_dim=0, append_prior=False):
         super().__init__()
         self._prior = _SimplePrior(prior_dim, latent_dim) if prior_dim else _NormalPrior(latent_dim=latent_dim)
         self._posterior = _Posterior(latent_dim, sdim + adim, n_layers=post_rnn_layers, rnn_dim=post_rnn_dim, bidirectional=post_bidirect)
 
         # action processing
-        self._action_lstm = nn.LSTM(sdim + latent_dim, lstm_dim, n_layers)
+        self._append_prior = append_prior
+        mult = 2 if append_prior else 1
+        self._action_lstm = nn.LSTM(sdim + mult * latent_dim, lstm_dim, n_layers)
         self._mdn = MixtureDensityTop(lstm_dim, adim, n_mixtures) if n_mixtures else None
         if not n_mixtures:
             self._ac_top = nn.Linear(lstm_dim, adim)
         assert ss_ramp > 0, 'must be non neg'
         self._t, self._ramp, self._ss_dim = 0, ss_ramp, ss_dim
-        self._aux = nn.Sequential(nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, aux_dim)) if aux_dim else None
+        self._aux = nn.Sequential(nn.Linear(mult * latent_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, aux_dim)) if aux_dim else None
 
     def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False, prev_latent=None, context=None, sample_prior=False):
         assert not force_ss or not force_no_ss, "both settings cannot be true!"
@@ -166,6 +168,10 @@ class LatentStateImitation(nn.Module):
         else:
             sa_latent = posterior.rsample() if prev_latent is None else prev_latent
         
+        if self._append_prior:
+            p_sample = prior.rsample()
+            sa_latent = torch.cat((sa_latent, p_sample), 1)
+
         self._action_lstm.flatten_parameters()
         hidden, ss_p = None, self.ss_p
         pred, last_acs = [], None
