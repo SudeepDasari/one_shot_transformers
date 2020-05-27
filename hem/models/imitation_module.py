@@ -167,7 +167,7 @@ class LatentStateImitation(nn.Module):
             sa_latent = posterior.rsample() if prev_latent is None else prev_latent
         
         self._action_lstm.flatten_parameters()
-        hidden, ss_p = None, min(self._t / float(self._ramp), 1)
+        hidden, ss_p = None, self.ss_p
         pred, last_acs = [], None
         for t in range(states.shape[1]):
             if t == 0 or (not self.training and not force_ss) or force_no_ss:
@@ -199,12 +199,16 @@ class LatentStateImitation(nn.Module):
             mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
             if ret_dist:
                 return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior), sa_latent
-            return (mu, sigma_inv, alpha), (torch.distributions.kl.kl_divergence(posterior, prior), aux_pred), ss_p
+            return (mu, sigma_inv, alpha), (torch.distributions.kl.kl_divergence(posterior, prior), aux_pred)
 
         pred_acs = torch.cat(pred, 1)
         if ret_dist:
             return pred_acs, (posterior, prior), sa_latent
-        return pred_acs, (torch.distributions.kl.kl_divergence(posterior, prior), aux_pred), ss_p
+        return pred_acs, (torch.distributions.kl.kl_divergence(posterior, prior), aux_pred)
 
     def replace_prior(self, other):
         self._prior = other
+
+    @property
+    def ss_p(self):
+        return min(self._t / float(self._ramp), 1)

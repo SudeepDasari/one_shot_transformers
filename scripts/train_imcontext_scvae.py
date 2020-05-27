@@ -40,7 +40,7 @@ if __name__ == '__main__':
         states, actions, x_len, loss_mask = states.to(device), actions.to(device), x_len.to(device), loss_mask.to(device)
         aux_loc, aux_mask, im_context = aux_loc.to(device), aux_mask.to(device), im_context.to(device)
 
-        pred_acs, (kl, aux), ss_p = m(states, actions, x_len, False, force_ss=True, context=im_context, sample_prior=not config.get('train_both', True))
+        pred_acs, (kl, aux) = m(states, actions, x_len, False, force_ss=True, context=im_context, sample_prior=not config.get('train_both', True))
         if len(pred_acs) == 3:
             mu, sigma_inv, alpha = pred_acs
             action_distribution = GMMDistribution(mu, sigma_inv, alpha)
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         kl = torch.mean(kl)
         kl_beta = get_kl_beta(config, trainer.step)
         loss = config.get('recon_lambda', 1) * recon_loss + kl_beta * kl + aux_loss
-        stats = {'recon_loss': recon_loss.item(), 'kl': kl.item(), 'schedule_samp': ss_p, 'kl_beta': kl_beta}
+        stats = {'recon_loss': recon_loss.item(), 'kl': kl.item(), 'schedule_samp': m.ss_p, 'kl_beta': kl_beta}
         if aux is not None:
             stats['aux_loss'] = aux_loss.item()
 
