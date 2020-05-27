@@ -54,7 +54,7 @@ if __name__ == '__main__':
         kl = torch.mean(kl)
         kl_beta = get_kl_beta(config, trainer.step)
         loss = config.get('recon_lambda', 1) * recon_loss + kl_beta * kl + aux_loss
-        stats = {'recon_loss': recon_loss.item(), 'kl': kl.item(), 'schedule_samp': m.ss_p, 'kl_beta': kl_beta}
+        stats = {'recon_loss': recon_loss.item(), 'kl': kl.item(), 'schedule_samp': action_model.ss_p, 'kl_beta': kl_beta}
         if aux is not None:
             stats['aux_loss'] = aux_loss.item()
 
