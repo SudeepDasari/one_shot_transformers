@@ -124,13 +124,14 @@ class StateDataset(Dataset):
 
 
 class StateDatasetVisionContext(StateDataset):
-    def __init__(self, state_file, img_dir, img_width=320, img_height=240, rand_crop=None, color_jitter=None, **kwargs):
+    def __init__(self, state_file, img_dir, img_width=320, img_height=240, rand_crop=None, color_jitter=None, rand_gray=None, **kwargs):
         super().__init__(state_file, ret_start_T=True, **kwargs)
         self._img_dir = os.path.expanduser(img_dir)
         self._img_height, self._img_width = img_height, img_width
         self._human_grip_times = json.load(open(os.path.join(self._img_dir, 'human_grip_timings.json'), 'r'))
         self._color_jitter = color_jitter
         self._rand_crop = rand_crop
+        self._rand_gray = rand_gray
     
     def __getitem__(self, index):
         if torch.is_tensor(index):
@@ -140,9 +141,11 @@ class StateDatasetVisionContext(StateDataset):
         traj_ind = self._order[index]
         robot_frame = load_traj(os.path.join(self._img_dir, 'traj{}_robot.pkl'.format(traj_ind)))[start_T]['obs']['image']
         human_vid = load_traj(os.path.join(self._img_dir, 'traj{}_human.pkl'.format(traj_ind)))
-        start, end = human_vid[0]['obs']['image'], human_vid[len(human_vid) - 1]['obs']['image']
-        mid = human_vid[self._human_grip_times['traj{}_human.pkl'.format(traj_ind)]]['obs']['image']
+        grip_time = self._human_grip_times['traj{}_human.pkl'.format(traj_ind)]
+        start_time = 0 if grip_time < 8 else np.random.randint(6)
+        end_time = len(human_vid) - np.random.randint(1, 6)
+        start, mid, end = [human_vid[t]['obs']['image'] for t in (start_time, grip_time, end_time)]
 
         context = [resize(i, (self._img_width, self._img_height), False) for i in (robot_frame, start, mid, end)]
-        context = randomize_video(context, color_jitter=self._color_jitter, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
+        context = randomize_video(context, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
         return s, a, lens, lm, aux, auxm, context

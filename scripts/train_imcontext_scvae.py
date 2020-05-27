@@ -3,8 +3,6 @@ from hem.models.imitation_module import LatentStateImitation, _VidPrior
 from hem.models import Trainer
 from hem.models.mdn_loss import GMMDistribution
 import numpy as np
-from hem.datasets.util import STD, MEAN
-import matplotlib.pyplot as plt
 
 
 if __name__ == '__main__':
@@ -18,8 +16,9 @@ if __name__ == '__main__':
         action_model.load_state_dict(restore_weights, strict=False)
 
     # build image prior and restore weights if needed
-    img_prior = _VidPrior(**config['vid_prior'])
-    action_model.replace_prior(img_prior)
+    if config.get('replace_prior', False):
+        img_prior = _VidPrior(**config['policy']['vid_prior'])
+        action_model.replace_prior(img_prior)
     optim_weights = action_model.parameters() if config.get('train_both', True) else img_prior.parameters()
 
     # build losses

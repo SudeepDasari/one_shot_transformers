@@ -120,13 +120,13 @@ class _SimplePrior(nn.Module):
  
 
 class _VidPrior(nn.Module):
-    def __init__(self, vec_dim, latent_dim, n_nonloc=3, T=4, embed_restore='', temp=None, loc_dim=1024, drop_dim=3):
+    def __init__(self, vec_dim, latent_dim, n_nonloc=2, dropout=0.1, T=4, embed_restore='', temp=None, loc_dim=1024, drop_dim=3):
         super().__init__()
         self._embed = get_model('resnet')(output_raw=True, drop_dim=drop_dim)
         if embed_restore:
             embed_restore = torch.load(embed_restore, map_location=torch.device('cpu')).state_dict()
             self._embed.load_state_dict(embed_restore, strict=False)
-        self._nonlocs = nn.Sequential(_NonLocalLayer(loc_dim, loc_dim, temperature=temp), _NonLocalLayer(loc_dim, loc_dim, temperature=temp))
+        self._nonlocs = nn.Sequential(*[_NonLocalLayer(loc_dim, loc_dim, temperature=temp, dropout=dropout) for _ in range(n_nonloc)])
         self._pool = nn.Sequential(nn.Conv3d(loc_dim, 256, T, stride=(1, T, T)), nn.BatchNorm3d(256), nn.ReLU(inplace=True))
         self._avg = torch.nn.AdaptiveAvgPool3d(256)
         self._latent_proc = nn.Sequential(nn.Linear(256 + vec_dim, 2 * latent_dim), nn.ReLU(inplace=True))
@@ -143,13 +143,17 @@ class _VidPrior(nn.Module):
 
 
 class LatentStateImitation(nn.Module):
-    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000, aux_dim=0, prior_dim=0, append_prior=False):
+    def __init__(self, adim, sdim, n_layers, latent_dim, lstm_dim=32, post_rnn_dim=64, post_rnn_layers=1, n_mixtures=3, post_bidirect=True, ss_dim=7,ss_ramp=10000, aux_dim=0, prior_dim=0, append_prior=False, aux_on_prior=False, vid_prior=None):
         super().__init__()
-        self._prior = _SimplePrior(prior_dim, latent_dim) if prior_dim else _NormalPrior(latent_dim=latent_dim)
+        if vid_prior is not None:
+            self._prior = _VidPrior(**vid_prior)
+        else:
+            self._prior = _SimplePrior(prior_dim, latent_dim) if prior_dim else _NormalPrior(latent_dim=latent_dim)
         self._posterior = _Posterior(latent_dim, sdim + adim, n_layers=post_rnn_layers, rnn_dim=post_rnn_dim, bidirectional=post_bidirect)
 
         # action processing
         self._append_prior = append_prior
+        self._aux_on_prior = aux_on_prior
         mult = 2 if append_prior else 1
         self._action_lstm = nn.LSTM(sdim + mult * latent_dim, lstm_dim, n_layers)
         self._mdn = MixtureDensityTop(lstm_dim, adim, n_mixtures) if n_mixtures else None
@@ -162,15 +166,15 @@ class LatentStateImitation(nn.Module):
     def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False, prev_latent=None, context=None, sample_prior=False):
         assert not force_ss or not force_no_ss, "both settings cannot be true!"
         prior = self._prior(states[:,0], context)
+        prior_sample = prior.rsample()
         posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
-        if sample_prior:
-            sa_latent = prior.rsample() if prev_latent is None else prev_latent
+        if prev_latent is not None:
+            sa_latent =  prev_latent
         else:
-            sa_latent = posterior.rsample() if prev_latent is None else prev_latent
+            sa_latent = prior.rsample() if sample_prior is None else posterior.rsample()
         
         if self._append_prior:
-            p_sample = prior.rsample()
-            sa_latent = torch.cat((sa_latent, p_sample), 1)
+            sa_latent = torch.cat((sa_latent, prior_sample), 1)
 
         self._action_lstm.flatten_parameters()
         hidden, ss_p = None, self.ss_p
@@ -200,7 +204,8 @@ class LatentStateImitation(nn.Module):
         if self.training:
             self._t += 1
         
-        aux_pred = self._aux(sa_latent) if self._aux is not None else None
+        aux_in = sa_latent if not self._aux_on_prior else prior_sample
+        aux_pred = self._aux(aux_in) if self._aux is not None else None
         if self._mdn is not None:
             mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
             if ret_dist:
