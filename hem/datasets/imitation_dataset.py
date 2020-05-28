@@ -152,7 +152,7 @@ class StateDatasetVisionContext(StateDataset):
 
 
 class AuxDataset(Dataset):
-    def __init__(self, root_dir, img_width=320, img_height=240, rand_crop=None, color_jitter=None, rand_gray=None, split=[0.9, 0.1], mode='train'):
+    def __init__(self, root_dir, img_width=320, img_height=240, rand_crop=None, color_jitter=None, rand_gray=None, split=[0.9, 0.1], mode='train', center=False):
         self._img_dir = os.path.expanduser(root_dir)
         self._img_height, self._img_width = img_height, img_width
         self._human_grip_times = json.load(open(os.path.join(self._img_dir, 'human_grip_timings.json'), 'r'))
@@ -160,6 +160,7 @@ class AuxDataset(Dataset):
         self._color_jitter = color_jitter
         self._rand_crop = rand_crop
         self._rand_gray = rand_gray
+        self._center = center
     
     def __len__(self):
         return len(self._file_inds)
@@ -186,6 +187,12 @@ class AuxDataset(Dataset):
         for x in (grip, drop):
             if x[3] < 0:
                 x[3] += 2
+        if self._center:
+            mean = np.array([0.647, 0.0308, 0.10047, 1, 0.1464, 0.1464, 0.010817]).reshape((-1))
+            std = np.array([0.231, 0.447, 0.28409, 0.04, 0.854, 0.854, 0.0653]).reshape((-1))
+            for tensor in [grip, drop]:
+                tensor[:7] -= mean.astype(np.float32)
+                tensor[:7] /= std.astype(np.float32)
         
         human_vid = load_traj(os.path.join(self._img_dir, 'traj{}_human.pkl'.format(traj_ind)))
         grip_time = self._human_grip_times['traj{}_human.pkl'.format(traj_ind)]
@@ -193,6 +200,8 @@ class AuxDataset(Dataset):
         end_time = len(human_vid) - np.random.randint(1, 6)
         start, mid, end = [human_vid[t]['obs']['image'] for t in (start_time, grip_time, end_time)]
 
-        context = [resize(i, (self._img_width, self._img_height), False) for i in (robot_frame, start, mid, end)]
+        robot_frame = [resize(robot_frame, (self._img_width, self._img_height), False)]
+        robot_frame = randomize_video(robot_frame, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
+        context = [resize(i, (self._img_width, self._img_height), False) for i in (start, mid, end)]
         context = randomize_video(context, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
-        return context, np.concatenate((grip, drop)).astype(np.float32)
+        return np.concatenate((robot_frame, context), 0).astype(np.float32), np.concatenate((grip, drop)).astype(np.float32)

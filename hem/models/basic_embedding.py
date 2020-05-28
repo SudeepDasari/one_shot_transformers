@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from hem.models.traj_embed import _NonLocalLayer
 
 
 class BasicEmbeddingModel(nn.Module):
@@ -231,3 +232,22 @@ class SimpleSpatialSoftmax(nn.Module):
         if reshaped:
             x = x.view((B, T, 512))
         return self._out(x)
+
+
+class AuxModel(nn.Module):
+    def __init__(self, bottleneck_dim, n_nonloc=2, dropout=0.1, T=4, embed_restore='', temp=None, loc_dim=1024, drop_dim=3, HW=300):
+        super().__init__()
+        self._embed = ResNetFeats(output_raw=True, drop_dim=drop_dim)
+        if embed_restore:
+            embed_restore = torch.load(embed_restore, map_location=torch.device('cpu')).state_dict()
+            self._embed.load_state_dict(embed_restore, strict=False)
+        self._nonlocs = nn.Sequential(*[_NonLocalLayer(loc_dim, loc_dim, temperature=temp, dropout=dropout) for _ in range(n_nonloc)])
+        self._project_channel = nn.Linear(loc_dim, 1)
+        self._to_bottlekneck = nn.Sequential(nn.Linear(HW * T, bottleneck_dim), nn.ReLU(inplace=True), nn.Linear(bottleneck_dim, bottleneck_dim))
+        
+    def forward(self, context):
+        context_embeds = self._embed(context)
+        context_embeds = self._nonlocs(context_embeds.transpose(1, 2))
+        proj_embeds = self._project_channel(context_embeds.view((context_embeds.shape[0], context_embeds.shape[1], -1)).transpose(1, 2))[:,:,0]
+        bottleneck = self._to_bottlekneck(proj_embeds)
+        return bottleneck
