@@ -149,3 +149,50 @@ class StateDatasetVisionContext(StateDataset):
         context = [resize(i, (self._img_width, self._img_height), False) for i in (robot_frame, start, mid, end)]
         context = randomize_video(context, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
         return s, a, lens, lm, aux, auxm, context
+
+
+class AuxDataset(Dataset):
+    def __init__(self, root_dir, img_width=320, img_height=240, rand_crop=None, color_jitter=None, rand_gray=None, split=[0.9, 0.1], mode='train'):
+        self._img_dir = os.path.expanduser(root_dir)
+        self._img_height, self._img_width = img_height, img_width
+        self._human_grip_times = json.load(open(os.path.join(self._img_dir, 'human_grip_timings.json'), 'r'))
+        self._file_inds = split_files(len(self._human_grip_times), split, mode)
+        self._color_jitter = color_jitter
+        self._rand_crop = rand_crop
+        self._rand_gray = rand_gray
+    
+    def __len__(self):
+        return len(self._file_inds)
+
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+
+        traj_ind = self._file_inds[index]
+        robot_traj = load_traj(os.path.join(self._img_dir, 'traj{}_robot.pkl'.format(traj_ind)))
+        robot_frame = robot_traj[0]['obs']['image']
+        obj_detected = np.concatenate([robot_traj.get(t, False)['obs']['object_detected'] for t in range(len(robot_traj))])
+        qpos = np.concatenate([robot_traj.get(t, False)['obs']['gripper_qpos'] for t in range(len(robot_traj))])
+        if obj_detected.any():
+            grip_t = int(np.argmax(obj_detected))
+            drop_t = min(len(robot_traj) - 1, int(len(robot_traj) - np.argmax(obj_detected[::-1])))
+        else:
+            closed = np.isclose(qpos, 0)
+            grip_t = int(np.argmax(closed))
+            drop_t = min(len(robot_traj) - 1, int(len(robot_traj) - np.argmax(closed[::-1])))
+        grip, drop = robot_traj.get(grip_t, False), robot_traj.get(drop_t, False)
+        grip = np.concatenate((grip['obs']['ee_pos'][:3], grip['obs']['axis_angle'])).astype(np.float32)
+        drop = np.concatenate((drop['obs']['ee_pos'][:3], drop['obs']['axis_angle'])).astype(np.float32)
+        for x in (grip, drop):
+            if x[3] < 0:
+                x[3] += 2
+        
+        human_vid = load_traj(os.path.join(self._img_dir, 'traj{}_human.pkl'.format(traj_ind)))
+        grip_time = self._human_grip_times['traj{}_human.pkl'.format(traj_ind)]
+        start_time = 0 if grip_time < 8 else np.random.randint(6)
+        end_time = len(human_vid) - np.random.randint(1, 6)
+        start, mid, end = [human_vid[t]['obs']['image'] for t in (start_time, grip_time, end_time)]
+
+        context = [resize(i, (self._img_width, self._img_height), False) for i in (robot_frame, start, mid, end)]
+        context = randomize_video(context, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
+        return context, np.concatenate((grip, drop)).astype(np.float32)
