@@ -49,5 +49,8 @@ if __name__ == '__main__':
         real_ac, mask = actions.cpu().numpy(), loss_mask.cpu().numpy()
         for d in range(actions.shape[2]):
             stats['l1_{}'.format(d)] = np.sum(np.abs(pred_acs[:,:,d] - real_ac[:,:,d]) * mask / np.sum(mask))
+
+        if action_model.training:
+            action_model.increment_ss()
         return loss, stats        
     trainer.train(action_model, forward)

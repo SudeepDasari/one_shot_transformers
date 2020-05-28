@@ -101,7 +101,7 @@ class _NormalPrior(nn.Module):
     def forward(self, states, context):
         mean = torch.zeros((states.shape[0], self._l_dim)).to(states.device)
         covar = torch.diag_embed(torch.ones((states.shape[0], self._l_dim))).to(states.device)
-        return MultivariateNormal(mean, covar)
+        return MultivariateNormal(mean, covar), None
 
 
 class _SimplePrior(nn.Module):
@@ -116,30 +116,36 @@ class _SimplePrior(nn.Module):
         p_latent = self._prior_nn(nn_in)
         mean = self._mean(p_latent)
         covar = torch.diag_embed(torch.exp(self._ln_var(p_latent)))
-        return MultivariateNormal(mean, covar)
+        return MultivariateNormal(mean, covar), None
  
 
 class _VidPrior(nn.Module):
-    def __init__(self, vec_dim, latent_dim, n_nonloc=2, dropout=0.1, T=4, embed_restore='', temp=None, loc_dim=1024, drop_dim=3):
+    def __init__(self, vec_dim, latent_dim, n_nonloc=1, dropout=0.3, T=4, embed_restore='', temp=None, loc_dim=1024, drop_dim=3, bottleneck_dim=14, HW=300, ret_bottleneck=False):
         super().__init__()
         self._embed = get_model('resnet')(output_raw=True, drop_dim=drop_dim)
         if embed_restore:
             embed_restore = torch.load(embed_restore, map_location=torch.device('cpu')).state_dict()
             self._embed.load_state_dict(embed_restore, strict=False)
         self._nonlocs = nn.Sequential(*[_NonLocalLayer(loc_dim, loc_dim, temperature=temp, dropout=dropout) for _ in range(n_nonloc)])
-        self._pool = nn.Sequential(nn.Conv3d(loc_dim, 256, T, stride=(1, T, T)), nn.BatchNorm3d(256), nn.ReLU(inplace=True))
-        self._avg = torch.nn.AdaptiveAvgPool3d(256)
-        self._latent_proc = nn.Sequential(nn.Linear(256 + vec_dim, 2 * latent_dim), nn.ReLU(inplace=True))
-        self._mean, self._ln_var = nn.Linear(2 * latent_dim, latent_dim), nn.Linear(2 * latent_dim, latent_dim)
+        self._project_channel = nn.Linear(loc_dim, 1)
+        self._to_bottlekneck = nn.Sequential(nn.Linear(HW * T, bottleneck_dim), nn.ReLU(inplace=True), nn.Linear(bottleneck_dim, bottleneck_dim))
+
+        self._latent_proc = nn.Sequential(nn.Linear(bottleneck_dim + vec_dim, latent_dim), nn.ReLU(inplace=True))
+        self._mean, self._ln_var = nn.Linear(latent_dim, latent_dim), nn.Linear(latent_dim, latent_dim)
+        self._ret_bottleneck = ret_bottleneck
 
     def forward(self, states, context):
         context_embeds = self._embed(context)
         context_embeds = self._nonlocs(context_embeds.transpose(1, 2))
-        context_embeds = self._avg(self._pool(context_embeds)[:,:,0])[:,:,0,0]
-        
-        latent = self._latent_proc(torch.cat((context_embeds, states), 1))
+        proj_embeds = self._project_channel(context_embeds.view((context_embeds.shape[0], context_embeds.shape[1], -1)).transpose(1, 2))[:,:,0]
+        bottleneck = self._to_bottlekneck(proj_embeds)
+
+        latent = self._latent_proc(torch.cat((bottleneck, states), 1))
         mean, covar = self._mean(latent), torch.diag_embed(torch.exp(self._ln_var(latent)))
-        return MultivariateNormal(mean, covar)
+
+        if self._ret_bottleneck:
+            return MultivariateNormal(mean, covar), bottleneck
+        return MultivariateNormal(mean, covar), None
 
 
 class LatentStateImitation(nn.Module):
@@ -170,7 +176,7 @@ class LatentStateImitation(nn.Module):
             posterior, prior = None, None
             prior_sample = sa_latent =  prev_latent
         else:
-            prior = self._prior(states[:,0], context)
+            prior, prior_aux = self._prior(states[:,0], context)
             prior_sample = prior.rsample()
             posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
             sa_latent = prior.rsample() if sample_prior is None else posterior.rsample()
@@ -203,11 +209,12 @@ class LatentStateImitation(nn.Module):
                 pred.append(a_out.transpose(0, 1))
                 last_acs = a_out.detach()[0]
         
-        if self.training:
-            self._t += 1
-        
-        aux_in = sa_latent if not self._aux_on_prior else prior_sample
-        aux_pred = self._aux(aux_in) if self._aux is not None else None
+        if prior_aux is not None:
+            aux_pred = prior_aux
+        else:
+            aux_in = sa_latent if not self._aux_on_prior else prior_sample
+            aux_pred = self._aux(aux_in) if self._aux is not None else None
+
         if self._mdn is not None:
             mu, sigma_inv, alpha = [torch.cat([tens[j] for tens in pred], 1) for j in range(3)]
             if ret_dist:
@@ -225,3 +232,6 @@ class LatentStateImitation(nn.Module):
     @property
     def ss_p(self):
         return min(self._t / float(self._ramp), 1)
+
+    def increment_ss(self):
+        self._t += 1
