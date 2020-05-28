@@ -165,12 +165,14 @@ class LatentStateImitation(nn.Module):
 
     def forward(self, states, actions=None, lens=None, ret_dist=True, force_ss=False, force_no_ss=False, prev_latent=None, context=None, sample_prior=False):
         assert not force_ss or not force_no_ss, "both settings cannot be true!"
-        prior = self._prior(states[:,0], context)
-        prior_sample = prior.rsample()
-        posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
+        
         if prev_latent is not None:
-            sa_latent =  prev_latent
+            posterior, prior = None, None
+            prior_sample = sa_latent =  prev_latent
         else:
+            prior = self._prior(states[:,0], context)
+            prior_sample = prior.rsample()
+            posterior = self._posterior(states, actions, lens=lens) if actions is not None else prior
             sa_latent = prior.rsample() if sample_prior is None else posterior.rsample()
         
         if self._append_prior:
