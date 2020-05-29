@@ -1,5 +1,5 @@
-from robosuite.environments.sawyer_pick_place import SawyerPickPlace as DefaultSawyerPickPlace
-from robosuite.environments.sawyer import SawyerEnv
+from robosuite.environments.panda_pick_place import PandaPickPlace as DefaultPandaPickPlace
+from robosuite.environments.panda import PandaEnv
 from hem.robosuite.arena.bin_arena import BinsArena
 from robosuite.models.objects import (
     MilkObject,
@@ -20,7 +20,7 @@ import robosuite.utils.transform_utils as T
 import numpy as np
 
 
-class SawyerPickPlace(DefaultSawyerPickPlace):
+class PandaPickPlace(DefaultPandaPickPlace):
     def __init__(self, randomize_goal=False, single_object_mode=0, no_clear=False, **kwargs):
         self._randomize_goal = randomize_goal
         self._no_clear = no_clear
@@ -64,7 +64,7 @@ class SawyerPickPlace(DefaultSawyerPickPlace):
         return super()._check_success()
     
     def _load_model(self):
-        SawyerEnv._load_model(self)
+        PandaEnv._load_model(self)
         self.mujoco_robot.set_base_xpos([0, 0, 0])
 
         # load model for table top workspace
@@ -196,7 +196,7 @@ class SawyerPickPlace(DefaultSawyerPickPlace):
         super().initialize_time(control_freq)
 
 
-class SawyerPickPlaceDistractor(SawyerPickPlace):
+class PandaPickPlaceDistractor(PandaPickPlace):
     """
     Easier version of task - place one object into its bin.
     A new object is sampled on every reset.
@@ -207,50 +207,3 @@ class SawyerPickPlaceDistractor(SawyerPickPlace):
         obj = np.random.choice(['milk', 'bread', 'cereal', 'can']) if not force_object else force_object
         super().__init__(single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=True, **kwargs)
 
-
-class SawyerPickPlaceMilk(SawyerPickPlace):
-    """
-    Easier version of task - place one milk into its bin.
-    """
-
-    def __init__(self, **kwargs):
-        assert (
-            "single_object_mode" not in kwargs and "object_type" not in kwargs
-        ), "invalid set of arguments"
-        super().__init__(single_object_mode=2, object_type="milk", **kwargs)
-
-
-class SawyerPickPlaceBread(SawyerPickPlace):
-    """
-    Easier version of task - place one bread into its bin.
-    """
-
-    def __init__(self, **kwargs):
-        assert (
-            "single_object_mode" not in kwargs and "object_type" not in kwargs
-        ), "invalid set of arguments"
-        super().__init__(single_object_mode=2, object_type="bread", **kwargs)
-
-
-class SawyerPickPlaceCereal(SawyerPickPlace):
-    """
-    Easier version of task - place one cereal into its bin.
-    """
-
-    def __init__(self, **kwargs):
-        assert (
-            "single_object_mode" not in kwargs and "object_type" not in kwargs
-        ), "invalid set of arguments"
-        super().__init__(single_object_mode=2, object_type="cereal", **kwargs)
-
-
-class SawyerPickPlaceCan(SawyerPickPlace):
-    """
-    Easier version of task - place one can into its bin.
-    """
-
-    def __init__(self, **kwargs):
-        assert (
-            "single_object_mode" not in kwargs and "object_type" not in kwargs
-        ), "invalid set of arguments"
-        super().__init__(single_object_mode=2, object_type="can", **kwargs)

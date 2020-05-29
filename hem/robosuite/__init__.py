@@ -1,10 +1,7 @@
 def get_env(env_name):
-    if env_name == 'SawyerPickPlace':
-        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlace
-        return SawyerPickPlace
-    if env_name == 'SawyerPickPlaceSingle':
-        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceSingle
-        return SawyerPickPlaceSingle
+    if env_name == 'SawyerPickPlaceDistractor':
+        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceDistractor
+        return SawyerPickPlaceDistractor
     if env_name == 'SawyerPickPlaceMilk':
         from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceMilk
         return SawyerPickPlaceMilk
@@ -17,12 +14,9 @@ def get_env(env_name):
     if env_name == 'SawyerPickPlaceCan':
         from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceCan
         return SawyerPickPlaceCan
-    if env_name == 'BaxterPickPlace':
-        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlace
-        return BaxterPickPlace
-    if env_name == 'BaxterPickPlaceSingle':
-        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceSingle
-        return BaxterPickPlaceSingle
+    if env_name == 'BaxterPickPlaceDistractor':
+        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceDistractor
+        return BaxterPickPlaceDistractor
     if env_name == 'BaxterPickPlaceMilk':
         from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceMilk
         return BaxterPickPlaceMilk
@@ -35,6 +29,9 @@ def get_env(env_name):
     if env_name == 'BaxterPickPlaceCan':
         from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceCan
         return BaxterPickPlaceCan
+    if env_name == 'PandaPickPlaceDistractor':
+        from hem.robosuite.panda.panda_pick_place import PandaPickPlaceDistractor
+        return PandaPickPlaceDistractor
     raise NotImplementedError
 
 

@@ -50,7 +50,8 @@ class BaxterPickPlace(BaxterEnv):
         camera_height=256,
         camera_width=256,
         camera_depth=False,
-        randomize_goal=False
+        randomize_goal=False,
+        no_clear = False
     ):
         """
         Args:
@@ -100,6 +101,7 @@ class BaxterPickPlace(BaxterEnv):
             camera_width (int): width of camera frame.
             camera_depth (bool): True if rendering RGB-D, and RGB otherwise.
         """
+        self._no_clear = no_clear
         self._randomize_goal = randomize_goal
         if randomize_goal:
             assert single_object_mode == 2, "only  works with single_object_mode==2!"
@@ -224,6 +226,9 @@ class BaxterPickPlace(BaxterEnv):
         for supporting task modes with single types of objects, as in
         @self.single_object_mode without changing the model definition.
         """
+        if self._no_clear:
+            return
+    
         for obj_name, obj_mjcf in self.mujoco_objects.items():
             if obj_name == obj:
                 continue
@@ -603,15 +608,16 @@ class BaxterPickPlace(BaxterEnv):
         super().initialize_time(control_freq)
 
 
-class BaxterPickPlaceSingle(BaxterPickPlace):
+class BaxterPickPlaceDistractor(BaxterPickPlace):
     """
     Easier version of task - place one object into its bin.
     A new object is sampled on every reset.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, force_object = '', **kwargs):
         assert "single_object_mode" not in kwargs, "invalid set of arguments"
-        super().__init__(single_object_mode=1, **kwargs)
+        obj = np.random.choice(['milk', 'bread', 'cereal', 'can']) if not force_object else force_object
+        super().__init__(single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=True, **kwargs)
 
 
 class BaxterPickPlaceMilk(BaxterPickPlace):
