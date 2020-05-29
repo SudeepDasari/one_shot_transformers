@@ -1,0 +1,15 @@
+batch_size: 16
+lr: 0.0001
+loader_workers: 0
+kl_beta: 1
+
+
+dataset:
+  type: gen grip
+  root_dir: ${REPO_DIR}
+  rand_crop: [10, 10]
+  color_jitter: [0.1, 0.15, 0.15]
+
+model:
+  inflate: [512, 256]
+  latent_dim: 256

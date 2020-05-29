@@ -29,3 +29,14 @@ def clean_dict(state_dict):
         if 'module' in k:
             state_dict[k[7:]] = state_dict.pop(k)
     return state_dict
+
+
+def get_kl_beta(config, step):
+    beta = config['kl_beta']
+    assert beta >=0
+    if 'kl_anneal' in config:
+        beta_0, start, end = config['kl_anneal']
+        assert end > start and beta_0 >= 0
+        alpha = min(max(float(step - start) / (end - start), 0), 1)
+        beta = (1 - alpha) * beta_0 + alpha * beta
+    return beta

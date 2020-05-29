@@ -13,6 +13,7 @@ import shutil
 import copy
 import yaml
 from hem.models.lr_scheduler import build_scheduler
+import torchvision
 
 
 class Trainer:
@@ -68,6 +69,8 @@ class Trainer:
         epochs = self._config.get('epochs', 1)
         vlm_alpha = self._config.get('vlm_alpha', 0.6)
         log_freq = self._config.get('log_freq', 20)
+        img_log_freq = self._config.get('img_log_freq', 500)
+        assert img_log_freq % log_freq == 0, "log_freq must divide img_log_freq!"
         save_freq = self._config.get('save_freq', 5000)
 
         if val_fn is None:
@@ -87,11 +90,14 @@ class Trainer:
                 mod_step = self._step % log_freq
                 train_stats['loss'] = (self._loss_to_scalar(loss_i) + mod_step * train_stats['loss']) / (mod_step + 1)
                 for k, v in stats_i.items():
+                    if isinstance(v, torch.Tensor):
+                        assert len(v.shape) == 4, "assumes 4dim BCHW image tensor!"
+                        train_stats[k] = v
                     if k not in train_stats:
                         train_stats[k] = 0
                     train_stats[k] = (v + mod_step * train_stats[k]) / (mod_step + 1)
                 
-                if mod_step == log_freq - 1:
+                if mod_step == 0:
                     try:
                         val_inputs = next(val_iter)
                     except StopIteration:
@@ -110,10 +116,13 @@ class Trainer:
                     vl_running_mean = val_loss * vlm_alpha + vl_running_mean * (1 - vlm_alpha)
 
                     self._writer.add_scalar('loss/val', val_loss, self._step)
-                    for k, v in val_stats.items():
-                        self._writer.add_scalar('{}/val'.format(k), v, self._step)
-                    for k, v in train_stats.items():
-                        self._writer.add_scalar('{}/train'.format(k), v, self._step)
+                    for stats_dict, mode in zip([train_stats, val_stats], ['train', 'val']):
+                        for k, v in stats_dict.items():
+                            if isinstance(v, torch.Tensor) and self.step % img_log_freq == 0:
+                                v_grid = torchvision.utils.make_grid(v.cpu())
+                                self._writer.add_image('{}/{}'.format(k, mode), v_grid, self._step)
+                            else:
+                                self._writer.add_scalar('{}/{}'.format(k, mode), v, self._step)
                     self._writer.file_writer.flush()
                     print('epoch {3}/{4}, step {0}: loss={1:.4f} \t val loss={2:.4f}'.format(self._step, train_stats['loss'], vl_running_mean, e, epochs))
                 else:

@@ -3,6 +3,7 @@ from hem.models.imitation_module import LatentStateImitation
 from hem.models import Trainer
 from hem.models.mdn_loss import GMMDistribution
 import numpy as np
+from hem.util import get_kl_beta
 
 
 if __name__ == '__main__':
@@ -14,15 +15,6 @@ if __name__ == '__main__':
     l1_loss = torch.nn.SmoothL1Loss()
     aux_l1_loss = torch.nn.SmoothL1Loss()
 
-    def get_kl_beta(config, step):
-        beta = config['kl_beta']
-        assert beta >=0
-        if 'kl_anneal' in config:
-            beta_0, start, end = config['kl_anneal']
-            assert end > start and beta_0 >= 0
-            alpha = min(max(float(step - start) / (end - start), 0), 1)
-            beta = (1 - alpha) * beta_0 + alpha * beta
-        return beta
 
     def forward(m, device, states, actions, x_len, loss_mask, aux_loc, aux_mask):
         states, actions, x_len, loss_mask = states.to(device), actions.to(device), x_len.to(device), loss_mask.to(device)

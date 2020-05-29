@@ -42,6 +42,9 @@ def get_dataset(name):
     elif name == 'aux':       
         from .imitation_dataset import AuxDataset
         return AuxDataset
+    elif name == 'gen grip':
+        from .image_gen_dataset import GenGrip
+        return GenGrip
     raise NotImplementedError
 
 
