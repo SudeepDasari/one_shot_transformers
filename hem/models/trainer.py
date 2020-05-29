@@ -121,7 +121,7 @@ class Trainer:
                             if isinstance(v, torch.Tensor) and self.step % img_log_freq == 0:
                                 v_grid = torchvision.utils.make_grid(v.cpu())
                                 self._writer.add_image('{}/{}'.format(k, mode), v_grid, self._step)
-                            else:
+                            elif not isinstance(v, torch.Tensor):
                                 self._writer.add_scalar('{}/{}'.format(k, mode), v, self._step)
                     self._writer.file_writer.flush()
                     print('epoch {3}/{4}, step {0}: loss={1:.4f} \t val loss={2:.4f}'.format(self._step, train_stats['loss'], vl_running_mean, e, epochs))
