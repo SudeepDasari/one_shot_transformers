@@ -112,6 +112,7 @@ class RSSM(nn.Module):
     def infer_states(self, obs_encodings, actions):
         states, kl = [self._posterior(torch.zeros_like(obs_encodings[:,0]), obs_encodings[:,0]).rsample()], []
         rnn_hidden = None
+        self._gru.flatten_parameters()
 
         for t_a in range(actions.shape[1]):
             prior, rnn_belief, rnn_hidden = self._transition_prior(states[-1], rnn_hidden, actions[:,t_a])
