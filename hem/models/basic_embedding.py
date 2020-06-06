@@ -78,13 +78,14 @@ class BasicEmbeddingModel(nn.Module):
 
 
 class ResNetFeats(nn.Module):
-    def __init__(self, out_dim=256, output_raw=False, drop_dim=1):
+    def __init__(self, out_dim=256, output_raw=False, drop_dim=1, use_resnet18=False):
         super(ResNetFeats, self).__init__()
-        resnet50 = models.resnet50(pretrained=True)
-        self._features = nn.Sequential(*list(resnet50.children())[:-drop_dim])
+        resnet = models.resnet18(pretrained=True) if use_resnet18 else models.resnet50(pretrained=True)
+        self._features = nn.Sequential(*list(resnet.children())[:-drop_dim])
         self._output_raw = output_raw
         if not output_raw:
-            self._out = nn.Sequential(nn.Linear(2048, out_dim), nn.ReLU(inplace=True), nn.Linear(out_dim, out_dim))
+            in_dim = 512 if use_resnet18 else 2048
+            self._out = nn.Sequential(nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True), nn.Linear(out_dim, out_dim))
             self._out_dim = out_dim
     
     def forward(self, x, depth=None):

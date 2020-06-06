@@ -91,7 +91,7 @@ class Trainer:
                 train_stats['loss'] = (self._loss_to_scalar(loss_i) + mod_step * train_stats['loss']) / (mod_step + 1)
                 for k, v in stats_i.items():
                     if isinstance(v, torch.Tensor):
-                        assert len(v.shape) == 4, "assumes 4dim BCHW image tensor!"
+                        assert len(v.shape) >= 4, "assumes 4dim BCHW image tensor!"
                         train_stats[k] = v
                     if k not in train_stats:
                         train_stats[k] = 0
@@ -119,8 +119,11 @@ class Trainer:
                     for stats_dict, mode in zip([train_stats, val_stats], ['train', 'val']):
                         for k, v in stats_dict.items():
                             if isinstance(v, torch.Tensor) and self.step % img_log_freq == 0:
-                                v_grid = torchvision.utils.make_grid(v.cpu())
-                                self._writer.add_image('{}/{}'.format(k, mode), v_grid, self._step)
+                                if len(v.shape) == 5:
+                                    self._writer.add_video('{}/{}'.format(k, mode), v.cpu(), self._step)
+                                else:
+                                    v_grid = torchvision.utils.make_grid(v.cpu())
+                                    self._writer.add_image('{}/{}'.format(k, mode), v_grid, self._step)
                             elif not isinstance(v, torch.Tensor):
                                 self._writer.add_scalar('{}/{}'.format(k, mode), v, self._step)
                     self._writer.file_writer.flush()

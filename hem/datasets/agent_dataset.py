@@ -4,28 +4,34 @@ import random
 import os
 import torch
 from hem.datasets.util import resize, crop, randomize_video
-# from hem.datasets.savers.render_loader import ImageRenderWrapper
 import random
 import numpy as np
 import io
 import tqdm
 from hem.datasets import get_files, load_traj
 from hem.datasets.util import split_files
+import pickle as pkl
 
 
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
                  T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False,
-                 color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None):
+                 color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, rep_buffer=0, target_vid=False):
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or T_pair > 0, "Must return (s,a) pairs or context!"
 
-        if files is None:
+        if files is None and rep_buffer:
+            all_files = []
+            for f in range(rep_buffer):
+                all_files.extend(pkl.load(open(os.path.expanduser(root_dir.format(f)), 'rb')))
+            order = split_files(len(all_files), split, mode)
+            files = [all_files[o] for o in order]
+        elif files is None:
             all_files = get_files(root_dir)
             order = split_files(len(all_files), split, mode)
             files = [all_files[o] for o in order]
 
-        self._files = files
+        self._trajs = files
         self._im_dims = (width, height)
         self._render_dims = tuple(render_dims[::-1]) if render_dims is not None else self._im_dims
         self._crop = tuple(crop) if crop is not None else (0, 0, 0, 0)
@@ -47,18 +53,21 @@ class AgentDemonstrations(Dataset):
         self._normalize = normalize
         self._append_s0 = append_s0
         self._sample_sides = sample_sides
+        self._target_vid = target_vid
 
     def __len__(self):
-        return len(self._files)
+        return len(self._trajs)
     
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
-        assert 0 <= index < len(self._files), "invalid index!"
+        assert 0 <= index < len(self._trajs), "invalid index!"
         return self.proc_traj(self.get_traj(index))
     
     def get_traj(self, index):
-        return load_traj(self._files[index])
+        if isinstance(self._trajs[index], str):
+            return load_traj(self._trajs[index])
+        return self._trajs[index]
 
     def proc_traj(self, traj):
         context_frames = []
@@ -134,6 +143,8 @@ class AgentDemonstrations(Dataset):
                 ret_dict['actions'].append(np.concatenate(action).astype(np.float32)[None])
         for k, v in ret_dict.items():
             ret_dict[k] = np.concatenate(v, 0).astype(np.float32)
+        if self._target_vid:
+            ret_dict['target_images'] = randomize_video(ret_dict['images'].copy(), normalize=self._normalize).transpose((0, 3, 1, 2))
         ret_dict['images'] = randomize_video(ret_dict['images'], self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)
         ret_dict['images'] = np.transpose(ret_dict['images'], (0, 3, 1, 2))
         return ret_dict

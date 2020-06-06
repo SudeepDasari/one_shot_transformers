@@ -1,0 +1,28 @@
+batch_size: 40
+lr: 0.001
+loader_workers: 32
+free_nats: 3
+epochs: 1000
+
+
+lr_schedule:
+  type: ExponentialDecay
+  rate: 0.98
+
+
+dataset:
+  type: "agent"
+  rep_buffer: 13
+  target_vid: True
+  root_dir: ${REPO_BUF}_{}.pkl
+  T_pair: 30
+  width: 80
+  height: 60
+  crop: [50, 0, 0, 0]
+  T_context: 0
+  color_jitter: [0.2, 0.3, 0.3]
+  rand_crop: [5, 5]
+  state_spec: ['robot-state']
+
+rssm:
+  latent_dim: 64
