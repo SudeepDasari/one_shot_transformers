@@ -1,9 +1,11 @@
-batch_size: 40
+batch_size: 10
 lr: 0.0001
-loader_workers: 32
+loader_workers: 5
 free_nats: 3
 epochs: 1000
-img_log_freq: 5000
+img_log_freq: 1000
+kl_beta: 0.1
+kl_anneal: [0, 0, 15000]
 
 
 dataset:
@@ -17,7 +19,7 @@ dataset:
   crop: [50, 0, 0, 0]
   T_context: 0
   color_jitter: [0.2, 0.3, 0.3]
-  rand_crop: [5, 5]
+  #rand_crop: [5, 5]
   state_spec: ['robot-state']
 
 rssm:

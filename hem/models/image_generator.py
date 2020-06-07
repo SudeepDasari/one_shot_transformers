@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from hem.models import get_model
 from hem.models.traj_embed import _NonLocalLayer
 from hem.models.basic_embedding import _BottleneckConv
-from torch.distributions import MultivariateNormal
-
+from torch.distributions import Normal, MultivariateNormal
+import torchvision
 
 
 class CondVAE(nn.Module):
@@ -55,22 +55,26 @@ class CondVAE(nn.Module):
 
 
 class RSSM(nn.Module):
-    def __init__(self, latent_dim, vis_dim=512, state_dim=0, action_dim=8, ff_dim=256, min_var=0.01, inflate_k=[2,5,2], inflate_d=[512, 256, 128]):
+    def __init__(self, latent_dim, vis_dim=512, state_dim=0, action_dim=8, ff_dim=256, min_std=0.1, inflate_k=[2,5,2], inflate_d=[512, 256, 128]):
         super().__init__()
         
         # encoder attributes
-        self._vis_encoder = get_model('resnet')(out_dim=vis_dim, use_resnet18=True)
+        vgg_feats =list(torchvision.models.vgg16(pretrained=True).features[:17].children())
+        added_feats = [_BottleneckConv(256, 256, 64) for _ in range(2)]
+        added_feats.extend([nn.Conv2d(256, 256, 4, stride=2), nn.ReLU(inplace=True)])
+        self._vis_enc_stack = nn.Sequential(*(vgg_feats + added_feats))
+        self._vis_enc_out = nn.Sequential(nn.Linear(2048, 512), nn.ReLU(inplace=True))
         self._append_state = state_dim > 0
         self._obs_encode = nn.Sequential(nn.Linear(vis_dim + state_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
 
         # state inference models
-        self._min_var = min_var
+        self._min_std = min_std
         self._gru_in = nn.Sequential(nn.Linear(latent_dim + action_dim, ff_dim), nn.ReLU(inplace=True))
         self._gru = nn.GRU(ff_dim, ff_dim)
         self._prior_layers = nn.Sequential(nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
-        self._prior_mean, self._prior_lnvar = nn.Linear(ff_dim, latent_dim), nn.Linear(ff_dim, latent_dim)
+        self._prior_mean, self._prior_lnstd = nn.Linear(ff_dim, latent_dim), nn.Linear(ff_dim, latent_dim)
         self._post_layers = nn.Sequential(nn.Linear(2 * ff_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
-        self._post_mean, self._post_lnvar = nn.Linear(ff_dim, latent_dim), nn.Linear(ff_dim, latent_dim)
+        self._post_mean, self._post_lnstd = nn.Linear(ff_dim, latent_dim), nn.Linear(ff_dim, latent_dim)
 
         # decoder layers
         self._state_dec = nn.Sequential(nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, state_dim)) if state_dim else None
@@ -88,7 +92,9 @@ class RSSM(nn.Module):
         self._dec_out = nn.Conv2d(last, 3, 3, padding=1)
     
     def encode(self, images, states):
-        obs_encode = self._vis_encoder(images)
+        obs_encode = self._vis_enc_stack(images.view((-1, images.shape[-3], images.shape[-2], images.shape[-1])))
+        obs_encode = self._vis_enc_out(obs_encode.view((-1, 2048)))
+        obs_encode = obs_encode.view((images.shape[0], images.shape[1], 512)) if len(images.shape) == 5 else obs_encode
         obs_encode = torch.cat((obs_encode, states), -1) if self._append_state else obs_encode
         return self._obs_encode(obs_encode)
     
@@ -120,7 +126,7 @@ class RSSM(nn.Module):
             if t_a + 1 < obs_encodings.shape[1]:
                 posterior = self._posterior(rnn_belief, obs_encodings[:,t_a+1])
                 states.append(posterior.rsample())
-                kl.append(torch.distributions.kl_divergence(posterior, prior))
+                kl.append(torch.sum(torch.distributions.kl_divergence(posterior, prior), -1))
             else:
                 states.append(prior.rsample())
         
@@ -140,14 +146,14 @@ class RSSM(nn.Module):
     def _posterior(self, rnn_belief, obs_enc):
         post_in = torch.cat((rnn_belief, obs_enc), 1)
         post_mid = self._post_layers(post_in)
-        mean, var = self._post_mean(post_mid), torch.diag_embed(torch.exp(self._post_lnvar(post_mid)) + self._min_var)
-        posterior = MultivariateNormal(mean, var)
+        mean, std = self._post_mean(post_mid), torch.exp(self._post_lnstd(post_mid)) + self._min_std
+        posterior = Normal(mean, std)
         return posterior
 
     def _transition_prior(self, prev_state, rnn_hidden, action):
         gru_in = self._gru_in(torch.cat((prev_state, action), 1))
         rnn_belief, hidden = self._gru(gru_in[None], rnn_hidden)
         prior_mid = self._prior_layers(rnn_belief[0])
-        mean, var = self._prior_mean(prior_mid), torch.diag_embed(torch.exp(self._prior_lnvar(prior_mid)) + self._min_var)
-        prior = MultivariateNormal(mean, var)
+        mean, std = self._prior_mean(prior_mid), torch.exp(self._prior_lnstd(prior_mid)) + self._min_std
+        prior = Normal(mean, std)
         return prior, rnn_belief[0], hidden
