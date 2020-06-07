@@ -1,4 +1,4 @@
-batch_size: 10
+batch_size: 12
 lr: 0.0001
 loader_workers: 5
 free_nats: 3
@@ -10,17 +10,17 @@ kl_anneal: [0, 0, 15000]
 
 dataset:
   type: "agent"
-  rep_buffer: 13
+  rep_buffer: 1
   target_vid: True
   root_dir: ${REPO_BUF}_{}.pkl
   T_pair: 30
   width: 80
   height: 60
-  crop: [50, 0, 0, 0]
+  crop: [100, 0, 0, 0]
   T_context: 0
   color_jitter: [0.2, 0.3, 0.3]
   #rand_crop: [5, 5]
   state_spec: ['robot-state']
 
 rssm:
-  latent_dim: 64
+  latent_dim: 128
