@@ -2,8 +2,10 @@ batch_size: 12
 lr: 0.0001
 loader_workers: 5
 free_nats: 3
-epochs: 1000
+epochs: 3000
 img_log_freq: 1000
+kl_cycle: 20000
+max_kl_cycle: 150000
 kl_beta: 0.1
 kl_anneal: [0, 0, 15000]
 save_freq: 20000

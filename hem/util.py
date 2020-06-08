@@ -33,6 +33,7 @@ def clean_dict(state_dict):
 
 def get_kl_beta(config, step):
     beta = config['kl_beta']
+    step = step % config['kl_cycle'] if 'kl_cycle' in config and step < config.get('max_kl_cycle', float('inf')) else step
     assert beta >=0
     if 'kl_anneal' in config:
         beta_0, start, end = config['kl_anneal']

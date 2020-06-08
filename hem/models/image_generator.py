@@ -63,7 +63,7 @@ class RSSM(nn.Module):
         added_feats = [_BottleneckConv(256, 256, 64) for _ in range(2)]
         added_feats.extend([nn.Conv2d(256, 256, 4, stride=2), nn.ReLU(inplace=True)])
         self._vis_enc_stack = nn.Sequential(*(vgg_feats + added_feats))
-        self._vis_enc_out = nn.Sequential(nn.Linear(2048, 512), nn.ReLU(inplace=True))
+        self._vis_enc_out = nn.Sequential(nn.Linear(2048, vis_dim), nn.ReLU(inplace=True))
         self._append_state = state_dim > 0
         self._obs_encode = nn.Sequential(nn.Linear(vis_dim + state_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
 
