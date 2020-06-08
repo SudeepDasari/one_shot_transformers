@@ -6,7 +6,7 @@ epochs: 1000
 img_log_freq: 1000
 kl_beta: 0.1
 kl_anneal: [0, 0, 15000]
-
+save_freq: 20000
 
 dataset:
   type: "agent"
