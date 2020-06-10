@@ -30,7 +30,7 @@ if __name__ == '__main__':
         beta = get_kl_beta(config, trainer.step)
 
         # combine log likelihood and kl terms
-        loss = beta * kl_loss - ll
+        loss = beta * kl_loss - ll if beta > 0 else -ll
         
         stats = {'kl': torch.mean(kl).item(), 'LL': ll.item(), 'images_l1': np.mean(np.abs(pairs['target_images'].numpy() - recon['images'].detach().cpu().numpy())), 'kl_beta': beta}
         if 'states' in recon:
