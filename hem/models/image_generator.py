@@ -156,7 +156,7 @@ class RSSM(nn.Module):
     def _posterior(self, rnn_belief, obs_enc):
         post_in = torch.cat((rnn_belief, obs_enc), 1)
         post_mid = self._post_layers(post_in)
-        mean, std = self._post_mean(post_mid), torch.exp(self._post_lnstd(post_mid)) + self._min_std
+        mean, std = self._post_mean(post_mid), F.softplus(self._post_lnstd(post_mid)) + self._min_std
         posterior = Normal(mean, std)
         return posterior
 
@@ -164,6 +164,6 @@ class RSSM(nn.Module):
         gru_in = self._gru_in(torch.cat((prev_state, action), 1))
         rnn_belief, hidden = self._gru(gru_in[None], rnn_hidden)
         prior_mid = self._prior_layers(rnn_belief[0])
-        mean, std = self._prior_mean(prior_mid), torch.exp(self._prior_lnstd(prior_mid)) + self._min_std
+        mean, std = self._prior_mean(prior_mid), F.softplus(self._prior_lnstd(prior_mid)) + self._min_std
         prior = Normal(mean, std)
         return prior, rnn_belief[0], hidden
