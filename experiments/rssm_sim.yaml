@@ -12,7 +12,7 @@ save_freq: 20000
 
 dataset:
   type: "agent"
-  rep_buffer: 1
+  rep_buffer: 13
   target_vid: True
   root_dir: ${REPO_BUF}_{}.pkl
   T_pair: 30
