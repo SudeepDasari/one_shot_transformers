@@ -54,16 +54,49 @@ class CondVAE(nn.Module):
         return dec_out, kl
 
 
+class _VisDecoder(nn.Module):
+    def __init__(self, dec_in, dec_filters=[256, 256, 128], dc_kernel_sizes=[2,5,2], c_kernel_size=3):
+        super().__init__()
+        pad_size = int(c_kernel_size // 2)
+        f1, f2, f3 = dec_filters
+        k1, k2, k3 = dc_kernel_sizes
+        
+        def _build_deconv(last, f, n, dc_k):
+            convs = []
+            for _ in range(n):
+                c = nn.Conv2d(last, f, c_kernel_size, padding=pad_size)
+                n, a = nn.InstanceNorm2d(f), nn.ReLU(inplace=True)
+                last = f
+                convs.extend([c, n, a])
+            dc = nn.ConvTranspose2d(f, f, dc_k, stride=dc_k)
+            n, a = nn.InstanceNorm2d(f), nn.ReLU(inplace=True)
+            convs.extend([dc, n, a])
+            return convs
+
+        self._fc1 = nn.Linear(dec_in, 4 * f1)
+        self._ac1 = nn.Sequential(nn.InstanceNorm2d(f1), nn.ReLU(inplace=True))
+        self._dec1 = nn.Sequential(nn.ConvTranspose2d(f1, f1, 2, stride=(1, 2)), nn.InstanceNorm2d(f1), nn.ReLU(inplace=True))
+        self._dec2 = nn.Sequential(*_build_deconv(f1, f1, 4, k1))
+        self._dec3 = nn.Sequential(*_build_deconv(f1, f2, 3, k2))
+        self._dec4 = nn.Sequential(*_build_deconv(f2, f3, 2, k3))
+        self._conv_out = nn.Conv2d(f3, 3, 3, padding=1)
+
+    def forward(self, inputs):
+        has_t = len(inputs.shape) == 3
+        x = inputs.view((-1, inputs.shape[-1]))
+
+        x = self._ac1(self._fc1(x).view((x.shape[0], -1, 2, 2)))
+        x = self._conv_out(self._dec4(self._dec3(self._dec2(self._dec1(x)))))
+        x = x.view((inputs.shape[0], inputs.shape[1], 3, x.shape[-2], x.shape[-1])) if has_t else x
+        return x
+
+
 class RSSM(nn.Module):
     def __init__(self, latent_dim, vis_dim=512, state_dim=0, action_dim=8, ff_dim=256, min_std=0.1, inflate_k=[2,5,2], inflate_d=[512, 256, 128]):
         super().__init__()
         
         # encoder attributes
-        vgg_feats =list(torchvision.models.vgg16(pretrained=True).features[:17].children())
-        added_feats = [_BottleneckConv(256, 256, 64) for _ in range(2)]
-        added_feats.extend([nn.Conv2d(256, 256, 4, stride=2), nn.ReLU(inplace=True)])
-        self._vis_enc_stack = nn.Sequential(*(vgg_feats + added_feats))
-        self._vis_enc_out = nn.Sequential(nn.Linear(2048, vis_dim), nn.ReLU(inplace=True))
+        self._vis_enc = get_model('resnet')(out_dim=vis_dim, use_resnet18=True, drop_dim=1)
         self._append_state = state_dim > 0
         self._obs_encode = nn.Sequential(nn.Linear(vis_dim + state_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
 
@@ -78,23 +111,10 @@ class RSSM(nn.Module):
 
         # decoder layers
         self._state_dec = nn.Sequential(nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, state_dim)) if state_dim else None
-        self._vis_lin = nn.Sequential(nn.Linear(latent_dim, 1024), nn.ReLU(inplace=True))
-        self._dec1 = nn.Sequential(nn.ConvTranspose2d(1024, 1024, 2, stride=2), nn.ReLU(inplace=True), nn.ConvTranspose2d(1024, 1024, 2, stride=2))
-        self._dec2 = []
-        last = 1024
-        for d, k in zip(inflate_d, inflate_k):
-            c_up = nn.ConvTranspose2d(last, d, k, stride=k)
-            c_up_ac = nn.ReLU(inplace=True)
-            bottle = _BottleneckConv(d, d, 32)
-            self._dec2.extend([c_up, c_up_ac, bottle])
-            last = d
-        self._dec2 = nn.Sequential(*self._dec2)
-        self._dec_out = nn.Conv2d(last, 3, 3, padding=1)
+        self._img_dec = _VisDecoder(latent_dim, inflate_d, inflate_k)
     
     def encode(self, images, states):
-        obs_encode = self._vis_enc_stack(images.view((-1, images.shape[-3], images.shape[-2], images.shape[-1])))
-        obs_encode = self._vis_enc_out(obs_encode.view((-1, 2048)))
-        obs_encode = obs_encode.view((images.shape[0], images.shape[1], 512)) if len(images.shape) == 5 else obs_encode
+        obs_encode = self._vis_enc(images)
         obs_encode = torch.cat((obs_encode, states), -1) if self._append_state else obs_encode
         return self._obs_encode(obs_encode)
     
@@ -102,17 +122,7 @@ class RSSM(nn.Module):
         recon = {}
         if self._state_dec is not None:
             recon['states'] = self._state_dec(latent_state)
-
-        reshaped = len(latent_state.shape) > 2
-        if reshaped:
-            B, T, L = latent_state.shape
-            latent_state = latent_state.view((B * T, L))
-        vis_lin = self._vis_lin(latent_state).unsqueeze(-1).unsqueeze(-1)
-        dec1 = self._dec1(vis_lin)[:,:,1:,:]
-        dec2 = self._dec2(dec1)
-        
-        img_recon = self._dec_out(dec2)
-        recon['images'] = img_recon.view((B, T, img_recon.shape[1], img_recon.shape[2], img_recon.shape[3])) if reshaped else img_recon
+        recon['images'] = self._img_dec(latent_state)
         return recon
 
     def infer_states(self, obs_encodings, actions):

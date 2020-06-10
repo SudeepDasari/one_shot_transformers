@@ -1,5 +1,5 @@
 batch_size: 12
-lr: 0.0001
+lr: 0.001
 loader_workers: 5
 free_nats: 3
 epochs: 3000
@@ -18,7 +18,7 @@ dataset:
   T_pair: 30
   width: 80
   height: 60
-  crop: [100, 0, 0, 0]
+  crop: [120, 0, 0, 0]
   T_context: 0
   color_jitter: [0.2, 0.3, 0.3]
   #rand_crop: [5, 5]
