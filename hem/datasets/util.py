@@ -15,7 +15,7 @@ SAWYER_DEMO_PRIOR = np.array([-1.95254033,  -3.25514605,  1.0,        -2.8569129
                             -3.67211177, 1.0,         -3.22493535, -12.45458803, -11.76144085, 0, 0])
 
 
-def resize(image, target_dim, normalize=False):
+def resize(image, target_dim, normalize=False, reduce_bits=False):
     if image.shape[:2] != target_dim:
         inter_method = cv2.INTER_AREA
         if np.prod(image.shape[:2]) > np.prod(target_dim):
@@ -27,6 +27,10 @@ def resize(image, target_dim, normalize=False):
 
     if len(resized.shape) == 2:
         resized = resized[:,:,None]
+    
+    if reduce_bits:
+        assert resized.dtype == np.uint8, "math only works on uint8 data!"
+        resized -= resized % 8
 
     if normalize:
         return (resized.astype(np.float32) / 255 - MEAN) / STD

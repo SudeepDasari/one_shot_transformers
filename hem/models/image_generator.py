@@ -6,6 +6,7 @@ from hem.models.traj_embed import _NonLocalLayer
 from hem.models.basic_embedding import _BottleneckConv
 from torch.distributions import Normal, MultivariateNormal
 import torchvision
+import numpy as np
 
 
 class CondVAE(nn.Module):
@@ -73,68 +74,85 @@ class _VisDecoder(nn.Module):
             convs.extend([dc, n, a])
             return convs
 
-        self._fc1 = nn.Linear(dec_in, 4 * f1)
-        self._ac1 = nn.Sequential(nn.InstanceNorm2d(f1), nn.ReLU(inplace=True))
-        self._dec1 = nn.Sequential(nn.ConvTranspose2d(f1, f1, 2, stride=(1, 2)), nn.InstanceNorm2d(f1), nn.ReLU(inplace=True))
-        self._dec2 = nn.Sequential(*_build_deconv(f1, f1, 4, k1))
-        self._dec3 = nn.Sequential(*_build_deconv(f1, f2, 3, k2))
-        self._dec4 = nn.Sequential(*_build_deconv(f2, f3, 2, k3))
-        self._conv_out = nn.Conv2d(f3, 3, 3, padding=1)
+        self._pool1 = nn.AdaptiveAvgPool2d((3, 4))
+        self._dec1 = nn.Sequential(*_build_deconv(1024 + dec_in, f1, 4, k1))
+        self._dec2 = nn.Sequential(*_build_deconv(f1, f2, 3, k2))
+        self._dec3 = nn.Sequential(*_build_deconv(f2, f3, 2, k3))
+        self._mean = nn.Conv2d(f3, 3, 3, padding=1)
 
-    def forward(self, inputs):
-        has_t = len(inputs.shape) == 3
-        x = inputs.view((-1, inputs.shape[-1]))
+    def forward(self, start_img_latent, latents):
+        has_t = len(latents.shape) == 3
+        pooled_img_latent = self._pool1(start_img_latent)[:,None].repeat((1, latents.shape[1], 1, 1, 1))
+        in_latent = latents.unsqueeze(-1).unsqueeze(-1).repeat((1, 1, 1, 3, 4))
+        x = torch.cat((pooled_img_latent, in_latent), 2)
+        x = x.view([latents.shape[0] * latents.shape[1]] + list(x.shape[2:])) if has_t else x
 
-        x = self._ac1(self._fc1(x).view((x.shape[0], -1, 2, 2)))
-        x = self._conv_out(self._dec4(self._dec3(self._dec2(self._dec1(x)))))
-        x = x.view((inputs.shape[0], inputs.shape[1], 3, x.shape[-2], x.shape[-1])) if has_t else x
-        return x
+        x = self._dec3(self._dec2(self._dec1(x)))
+        mu = self._mean(x)        
+        mu = mu.view([latents.shape[0], latents.shape[1]] + list(mu.shape[1:])) if has_t else mu
+        return mu
 
 
 class RSSM(nn.Module):
-    def __init__(self, latent_dim, vis_dim=512, state_dim=0, action_dim=8, ff_dim=256, min_std=0.1, inflate_k=[2,5,2], inflate_d=[512, 256, 128]):
+    def __init__(self, latent_dim, vis_dim=1024, state_dim=0, action_dim=8, ff_dim=256, min_std=0.01, inflate_k=[2,5,2], inflate_d=[128, 128, 64], attn_temp=None):
         super().__init__()
         
         # encoder attributes
-        self._vis_enc = get_model('resnet')(out_dim=vis_dim, use_resnet18=True, drop_dim=1)
+        self._vis_enc = get_model('resnet')(output_raw=True, drop_dim=3)
         self._append_state = state_dim > 0
-        self._obs_encode = nn.Sequential(nn.Linear(vis_dim + state_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
+        self._obs_encode = nn.Linear(vis_dim + state_dim, ff_dim) if vis_dim + state_dim != ff_dim else None
+        init_hidden = torch.nn.Parameter(torch.randn((1, 1, ff_dim)) * np.sqrt(2 / ff_dim), requires_grad=True)
+        self.register_parameter('_init_hidden', init_hidden)
+        self._attn_module = nn.Sequential(nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, vis_dim))
+        self._attn_temp = attn_temp if attn_temp is not None else np.sqrt(vis_dim)
 
         # state inference models
         self._min_std = min_std
         self._gru_in = nn.Sequential(nn.Linear(latent_dim + action_dim, ff_dim), nn.ReLU(inplace=True))
         self._gru = nn.GRU(ff_dim, ff_dim)
-        self._prior_layers = nn.Sequential(nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
+        self._prior_layers = nn.Sequential(nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
         self._prior_mean, self._prior_lnstd = nn.Linear(ff_dim, latent_dim), nn.Linear(ff_dim, latent_dim)
-        self._post_layers = nn.Sequential(nn.Linear(2 * ff_dim, ff_dim), nn.ReLU(inplace=True), nn.Linear(ff_dim, ff_dim), nn.ReLU(inplace=True))
+        self._post_layers = nn.Sequential(nn.Linear(2 * ff_dim, ff_dim), nn.ReLU(inplace=True))
         self._post_mean, self._post_lnstd = nn.Linear(ff_dim, latent_dim), nn.Linear(ff_dim, latent_dim)
+
+        # s_0 latent layers
+        self._img_layers = nn.ReLU()
+        self._img_s0_mean = nn.Sequential(nn.Conv2d(vis_dim, vis_dim, 1))
+        self._img_s0_std = nn.Sequential(nn.Conv2d(vis_dim, vis_dim, 1))
 
         # decoder layers
         self._state_dec = nn.Sequential(nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, state_dim)) if state_dim else None
         self._img_dec = _VisDecoder(latent_dim, inflate_d, inflate_k)
     
     def encode(self, images, states):
-        obs_encode = self._vis_enc(images)
+        img_feat = self._vis_enc(images)
+        obs_encode = torch.mean(img_feat, (-1, -2))
         obs_encode = torch.cat((obs_encode, states), -1) if self._append_state else obs_encode
-        return self._obs_encode(obs_encode)
-    
-    def decode(self, latent_state):
+        obs_encode = self._obs_encode(obs_encode) if self._obs_encode is not None else obs_encode
+        return obs_encode, img_feat
+
+    def decode(self, start_img_latent, latent_state):
         recon = {}
         if self._state_dec is not None:
             recon['states'] = self._state_dec(latent_state)
-        recon['images'] = self._img_dec(latent_state)
+        recon['images'] = self._img_dec(start_img_latent, latent_state)
         return recon
 
-    def infer_states(self, obs_encodings, actions):
-        states, kl = [self._posterior(torch.zeros_like(obs_encodings[:,0]), obs_encodings[:,0]).rsample()], []
-        rnn_hidden = None
+    def infer_states(self, images, state_obs, actions):
+        rnn_hidden = self._init_hidden.repeat((1, images.shape[0], 1))
+        obs_enc, img_feat = self.encode(images, state_obs)
+        img_dist_proc = self._img_layers(img_feat[:,0])
+        img_dist = Normal(self._img_s0_mean(img_dist_proc), F.softplus(self._img_s0_std(img_dist_proc)) + self._min_std)
+        kl_img = torch.sum(torch.distributions.kl_divergence(img_dist, Normal(0, 1)), (-1, -2, -3))
+        
+        post_s0 = self._posterior(torch.zeros_like(obs_enc[:,0]), obs_enc[:,0])
+        states, kl = [post_s0.rsample()], [kl_img, torch.sum(torch.distributions.kl_divergence(post_s0, Normal(0, 1)), -1)]
         self._gru.flatten_parameters()
 
         for t_a in range(actions.shape[1]):
             prior, rnn_belief, rnn_hidden = self._transition_prior(states[-1], rnn_hidden, actions[:,t_a])
-            
-            if t_a + 1 < obs_encodings.shape[1]:
-                posterior = self._posterior(rnn_belief, obs_encodings[:,t_a+1])
+            if t_a + 1 < images.shape[1]:
+                posterior = self._posterior(rnn_belief, obs_enc[:,t_a+1])
                 states.append(posterior.rsample())
                 kl.append(torch.sum(torch.distributions.kl_divergence(posterior, prior), -1))
             else:
@@ -142,12 +160,11 @@ class RSSM(nn.Module):
         
         states = torch.cat([s[:,None] for s in states], 1)
         kl = torch.cat([k[:,None] for k in kl], 1) if kl else kl
-        return states, kl
+        return img_dist.rsample(), states, kl
 
     def forward(self, images, states, actions, ret_recon=False):
-        obs_enc = self.encode(images, states)
-        latent_states, kl = self.infer_states(obs_enc, actions)
-        recon = self.decode(latent_states) if ret_recon else None
+        start_img_latent, latent_states, kl = self.infer_states(images, states, actions)
+        recon = self.decode(start_img_latent, latent_states) if ret_recon else None
         
         if ret_recon:
             return recon, kl

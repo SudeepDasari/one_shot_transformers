@@ -41,7 +41,8 @@ class MixtureDensityLoss(nn.Module):
 class GMMDistribution(torch.distributions.Distribution):
     def __init__(self, mean, sigma_inv, alpha, validate_args=None):
         assert mean.device == sigma_inv.device and mean.device == alpha.device, "all tensors must lie on same device!"
-        batch_shape, event_shape = sigma_inv.shape[:-1], mean.shape[-1:]
+        batch_shape = sigma_inv.shape[:-1]
+        event_shape = mean.shape[len(batch_shape)+1:]
         super().__init__(batch_shape, event_shape,validate_args)
         self._mean = mean
         self._sigma_inv = sigma_inv

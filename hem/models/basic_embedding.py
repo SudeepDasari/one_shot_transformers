@@ -83,32 +83,24 @@ class ResNetFeats(nn.Module):
         resnet = models.resnet18(pretrained=True) if use_resnet18 else models.resnet50(pretrained=True)
         self._features = nn.Sequential(*list(resnet.children())[:-drop_dim])
         self._output_raw = output_raw
+        self._out_dim = 512 if use_resnet18 else 2048
+        self._out_dim = int(self._out_dim / 2 ** (drop_dim - 2)) if drop_dim > 2 else drop_dim
         if not output_raw:
-            in_dim = 512 if use_resnet18 else 2048
-            self._out = nn.Sequential(nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True), nn.Linear(out_dim, out_dim))
+            self._nn_out = nn.Sequential(nn.Conv2d(self._out_dim, out_dim, 1), nn.BatchNorm2d(out_dim), nn.ReLU(inplace=True), nn.Conv2d(out_dim, out_dim, 1))
             self._out_dim = out_dim
     
-    def forward(self, x, depth=None):
-        reshaped = False
-        if len(x.shape) == 5:
-            reshaped = True
-            B, T, C, H, W = x.shape
-            x = x.reshape((B * T, C, H, W))
-        out = self._features(x)
-        NH, NW = out.shape[-2:]
-        
-        # reshape to proper dimension
-        if reshaped:
-            out = out.reshape((B, T, -1, NH, NW))
-        if NH * NW == 1:
-            if reshaped:
-                out = out[:,:,:,0,0]
-            else:
-                out = out[:,:,0,0]
+    def forward(self, inputs, depth=None):
+        reshaped = len(inputs.shape) == 5
+        x = inputs.reshape((-1, inputs.shape[-3], inputs.shape[-2], inputs.shape[-1]))
 
-        if not self._output_raw:
-            assert len(out.shape) < 4, "only works on non-spatial input!"
-            return self._out(out)
+        out = self._features(x)
+        out = self._nn_out(out) if not self._output_raw else out 
+        NH, NW = out.shape[-2:]
+
+        # reshape to proper dimension
+        out = out.reshape((inputs.shape[0], inputs.shape[1], self._out_dim, NH, NW)) if reshaped else out
+        if NH * NW == 1:
+            out = out[:,:,:,0,0] if reshaped else out[:,:,0,0]
         return out
 
     @property
@@ -130,64 +122,35 @@ class CoordConv(nn.Module):
 
 
 class VGGFeats(nn.Module):
-    def __init__(self, out_dim=64, depth=False):
+    def __init__(self, out_dim=512):
         super().__init__()
-        vgg_feats = models.vgg16(pretrained=True).features
-        vgg_feats = list(vgg_feats.children())[:4]
+        self._vgg = nn.Sequential(*list(models.vgg16(pretrained=True).features.children())[:9])
         
-        c0_in, self._has_depth = 64, False
-        if depth:
-            self._has_depth = True
-            c0_in += 1
-        cc0 = CoordConv(c0_in, 64, 3, stride=2)
-        n0 = nn.InstanceNorm2d(64, affine=True)
-        a0 = nn.ReLU(inplace=True)
+        def _conv_block(in_dim, out_dim, N):
+            # pool and coord conv
+            cc = CoordConv(in_dim, out_dim, 2, stride=2, padding=0)
+            n, a = nn.BatchNorm2d(out_dim), nn.ReLU(inplace=True)
+            ops = [cc, n, a]
 
-        cc1 = nn.Conv2d(64, 64, 3, 2, 1)
-        n1 = nn.InstanceNorm2d(64, affine=True)
-        a1 = nn.ReLU(inplace=True)
-        p1 = nn.MaxPool2d(2)
-
-        cc2_1 = nn.Conv2d(64, 64, 3, 1, 1)
-        n2_1 = nn.InstanceNorm2d(64, affine=True)
-        a2_1 = nn.ReLU(inplace=True)
-        cc2_2 = nn.Conv2d(64, 64, 3, 1, 1)
-        n2_2 = nn.InstanceNorm2d(64, affine=True)
-        a2_2 = nn.ReLU(inplace=True)
-        p2 = nn.AdaptiveAvgPool2d(1)
-
-        self._vgg = nn.Sequential(*vgg_feats)
-        self._v1 = nn.Sequential(*[cc0, n0, a0])
-        self._v2 = nn.Sequential(*[cc1, n1, a1, p1, cc2_1, n2_1, a2_1, cc2_2, n2_2, a2_2, p2])
-
+            for _ in range(N):
+                c = nn.Conv2d(out_dim, out_dim, 3, padding=1)
+                n, a = nn.BatchNorm2d(out_dim), nn.ReLU(inplace=True)
+                ops.extend([c, n, a])
+            return ops
+        
+        self._v1 = nn.Sequential(*_conv_block(128, 256, 3))
+        self._v2 = nn.Sequential(*_conv_block(256, 512, 3))
+        self._pool = nn.AdaptiveAvgPool2d(1)
         self._out_dim = out_dim
-        linear = nn.Linear(64, out_dim)
-        linear_ac = nn.ReLU(inplace=True)
-        self._linear = nn.Sequential(linear, linear_ac)
+        self._linear = nn.Sequential(nn.Linear(512, out_dim), nn.ReLU(inplace=True))
 
     def forward(self, x, depth=None):
-        if len(x.shape) == 5:
-            has_time = True
-            B, T, C, H, W = x.shape
-            x = x.reshape((B * T, C, H, W))
-            if self._has_depth:
-                depth = depth.reshape((B * T, 1, H, W))
-        else:
-            has_time = False
-            B, C, H, W = x.shape
-        
-        if self._has_depth:
-            visual_feats = self._vgg(x)
-            visual_feats = torch.cat((visual_feats, depth), 1)
-            visual_feats = self._v2(self._v1(visual_feats))
-        else:
-            visual_feats = self._v2(self._v1(self._vgg(x)))
-        visual_feats = visual_feats.reshape((visual_feats.shape[0], 64))
-        visual_feats = self._linear(visual_feats)
-
-        if has_time:
-            return visual_feats.reshape((B, T, self._out_dim))
-        return visual_feats
+        reshaped = len(x.shape) == 5
+        in_x = x.reshape((x.shape[0] * x.shape[1], x.shape[2], x.shape[3], x.shape[4])) if reshaped else x
+        vis_feat = self._pool(self._v2(self._v1(self._vgg(in_x))))
+        out_feat = self._linear(vis_feat[:,:,0,0])
+        out_feat = out_feat.view((x.shape[0], x.shape[1], self._out_dim)) if reshaped else out_feat
+        return out_feat
 
     @property
     def dim(self):
