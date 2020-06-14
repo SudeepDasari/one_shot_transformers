@@ -7,6 +7,7 @@ from hem.models.basic_embedding import _BottleneckConv
 from torch.distributions import Normal, MultivariateNormal
 import torchvision
 import numpy as np
+from hem.models.mdn_loss import GMMDistribution
 
 
 class CondVAE(nn.Module):
@@ -53,6 +54,87 @@ class CondVAE(nn.Module):
         dec_out = self._final(self._inflate_layers(self._concat_conv(dec_in)))
 
         return dec_out, kl
+
+
+class GoalVAE(nn.Module):
+    def __init__(self, latent_dim, n_non_loc=2, nloc_in=1024, drop_dim=2, dropout=0.1, inflate_d=[256, 128], inflate_k=[5, 2], min_std=0.01, n_mix=3):
+        super().__init__()
+        self._l_dim = latent_dim
+        self._embed = get_model('resnet')(use_resnet18=True, output_raw=True, drop_dim=drop_dim)
+        self._enc_proc = nn.Sequential(nn.ReLU(), nn.Linear(1024, 1024), nn.ReLU(inplace=True))
+        
+        self._min_std = min_std
+        
+        # layers for prior network
+        self._n_mix = n_mix
+        self._pri_mean = nn.Sequential(nn.Linear(1024, latent_dim * n_mix), nn.ReLU(inplace=True), nn.Linear(latent_dim * n_mix, latent_dim * n_mix))
+        self._pri_ln_std = nn.Sequential(nn.Linear(1024, latent_dim * n_mix), nn.ReLU(inplace=True), nn.Linear(latent_dim * n_mix, latent_dim * n_mix))
+        self._pri_alpha = nn.Sequential(nn.Linear(1024, latent_dim * n_mix), nn.ReLU(inplace=True), nn.Linear(latent_dim * n_mix, n_mix))
+        
+        # layers for posterior network
+        self._pst_proc = nn.Sequential(nn.Linear(2048, 1024), nn.ReLU(inplace=True), nn.Linear(1024, 2 * latent_dim), nn.ReLU(inplace=True))
+        self._pst_mean, self._pst_ln_std = [nn.Linear(2 * latent_dim, latent_dim) for _ in range(2)]
+
+        # deconv linear layers
+        self._dec_s_nn = nn.Sequential(nn.Linear(1024, 1024), nn.ReLU(inplace=True), nn.Linear(1024, 1024), nn.ReLU(inplace=True))
+        self._dec_lin = nn.Sequential(nn.Linear(latent_dim, 1024), nn.ReLU(inplace=True))
+        self._deconv1 = nn.Sequential(nn.ConvTranspose2d(256, 256, 2, stride=(1, 2)), nn.ReLU(inplace=True))
+        
+        deconv2 = []
+        last = 256
+        for d, k in zip(inflate_d, inflate_k):
+            c_up = nn.ConvTranspose2d(last, d, k, stride=k)
+            c_up_ac = nn.ReLU(inplace=True)
+            bottle = _BottleneckConv(d, d, 128)
+            deconv2.extend([c_up, c_up_ac, bottle])
+            last = d
+        self._deconv2 = nn.Sequential(*deconv2)
+        self._final_dec = nn.Sequential(nn.ConvTranspose2d(last, 64, 2, stride=2), nn.ReLU(inplace=True), nn.Conv2d(64, 3, 3, padding=1))
+
+    def forward(self, start, goal=None, ret_kl=True):
+        start_enc = self._spt_sft_feat(start)
+        prior = [self._pri_mean(start_enc).reshape((start.shape[0], self._n_mix, self._l_dim)),
+                    F.softplus(self._pri_ln_std(start_enc).reshape((start.shape[0], self._n_mix, self._l_dim))) + self._min_std,
+                    F.softmax(self._pri_alpha(start_enc).reshape((start.shape[0], self._n_mix)), -1)]
+
+        if goal is not None:
+            goal_enc = self._spt_sft_feat(goal)
+            posterior_nn = self._pst_proc(torch.cat((goal_enc, start_enc), -1))
+            posterior = Normal(self._pst_mean(posterior_nn), self._min_std + F.softplus(self._pst_ln_std(posterior_nn)))
+            latent, kl = posterior.rsample(), self._kl(posterior, prior)
+        else:
+            latent, kl = self._sample_prior(prior), None
+        
+        dec_latent = (self._dec_lin(latent) + self._dec_s_nn(start_enc)).view((start.shape[0], 256, 2, 2))
+        dec_conv = self._deconv1(dec_latent)
+        dec_conv = self._deconv2(dec_conv)
+        dec_out = self._final_dec(dec_conv)
+
+        if ret_kl:
+            return dec_out, kl
+        return dec_out
+
+    def _spt_sft_feat(self, tens):
+        feat = self._embed(tens)
+        feat = F.softmax(feat.view((feat.shape[0], feat.shape[1], -1)), dim=2).view(feat.shape)
+        h = torch.sum(torch.linspace(-1, 1, feat.shape[2]).view((1, 1, -1)).to(feat.device) * torch.sum(feat, 3), 2)
+        w = torch.sum(torch.linspace(-1, 1, feat.shape[3]).view((1, 1, -1)).to(feat.device) * torch.sum(feat, 2), 2)
+        feat = torch.cat((h, w), 1)
+        return self._enc_proc(feat)
+    
+    def _sample_prior(self, prior):
+        # implement for test time
+        raise NotImplementedError
+
+    def _kl(self, posterior, prior):
+        kl = []
+        mean, std, alpha = prior
+        for i in range(self._n_mix):
+            p_i = Normal(mean[:,i], std[:,i])
+            kl_i = torch.sum(torch.distributions.kl_divergence(posterior, p_i), -1)
+            kl.append((kl_i * alpha[:,i]).unsqueeze(-1))
+        kl = torch.cat(kl, -1)
+        return torch.sum(kl, -1)
 
 
 class _VisDecoder(nn.Module):

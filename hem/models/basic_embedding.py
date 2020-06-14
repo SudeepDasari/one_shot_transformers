@@ -84,7 +84,7 @@ class ResNetFeats(nn.Module):
         self._features = nn.Sequential(*list(resnet.children())[:-drop_dim])
         self._output_raw = output_raw
         self._out_dim = 512 if use_resnet18 else 2048
-        self._out_dim = int(self._out_dim / 2 ** (drop_dim - 2)) if drop_dim > 2 else drop_dim
+        self._out_dim = int(self._out_dim / 2 ** (drop_dim - 2)) if drop_dim >= 2 else self._out_dim
         if not output_raw:
             self._nn_out = nn.Sequential(nn.Conv2d(self._out_dim, out_dim, 1), nn.BatchNorm2d(out_dim), nn.ReLU(inplace=True), nn.Conv2d(out_dim, out_dim, 1))
             self._out_dim = out_dim

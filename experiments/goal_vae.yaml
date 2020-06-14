@@ -1,0 +1,20 @@
+batch_size: 50
+lr: 0.0001
+loader_workers: 8
+kl_beta: 0.1
+kl_anneal: [0.0, 15000, 100000]
+img_log_freq: 1000
+save_freq: 20000
+epochs: 3000
+
+
+dataset:
+  type: goal image
+  root_dir: ${REPO_BUF}
+  replay_buf: 1
+  easy_goal: True
+  # rand_crop: [10, 10]
+  # color_jitter: [0.1, 0.15, 0.15]
+
+model:
+  latent_dim: 64

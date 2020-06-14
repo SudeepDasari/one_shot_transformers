@@ -45,6 +45,9 @@ def get_dataset(name):
     elif name == 'gen grip':
         from .image_gen_dataset import GenGrip
         return GenGrip
+    elif name == 'goal image':
+        from .image_gen_dataset import GoalImageDataset
+        return GoalImageDataset
     raise NotImplementedError
 
 
