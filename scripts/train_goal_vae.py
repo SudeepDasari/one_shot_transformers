@@ -15,7 +15,7 @@ if __name__ == '__main__':
     gvae = GoalVAE(**config['model'])
     def forward(m, device, context, targets):
         start, goal, targets = context['start'].to(device), context['goal'].to(device), targets.to(device)
-        pred, kl = m(start, goal)
+        pred, kl = m(start, goal, ret_kl=True)
         recon_ll, kl = torch.mean(Laplace(pred, 1).log_prob(targets)), torch.mean(kl)
 
         beta = get_kl_beta(config, trainer.step)

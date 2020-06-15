@@ -25,6 +25,7 @@ class Trainer:
         parser.add_argument('--device', type=int, default=None, nargs='+', help='target device (uses all if not specified)')
         args = parser.parse_args()
         self._config = parse_basic_config(args.experiment_file)
+        save_config = copy.deepcopy(self._config)
         if args.save_path:
             self._config['save_path'] = args.save_path
 
@@ -46,7 +47,7 @@ class Trainer:
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         with open(os.path.join(save_dir, 'config.yaml'), 'w') as f:
-            yaml.dump(self._config, f, default_flow_style=False)
+            yaml.dump(save_config, f, default_flow_style=False)
         self._writer = SummaryWriter(log_dir=os.path.join(save_dir, 'log'))
         self._save_fname = os.path.join(save_dir, 'model_save')
         self._step = None
