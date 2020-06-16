@@ -100,4 +100,6 @@ class GoalImageDataset(Dataset):
         ctxt = randomize_video(ctxt, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=self._normalize).transpose((0, 3, 1, 2))
 
         target = resize(crop(traj[t_g]['obs']['image'], self._crop), self._target_dims, False).transpose((2, 0, 1)) / 255
-        return {'start': ctxt[0], 'goal': ctxt[1]}, target
+        is_agent = 'agent' in traj.config_str
+        pos = traj[t_g]['obs']['ee_aa'] if is_agent else np.zeros((7,))
+        return {'start': ctxt[0], 'goal': ctxt[1], 'is_agent': int(is_agent), 'pos': pos.astype(np.float32)}, target

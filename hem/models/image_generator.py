@@ -57,8 +57,9 @@ class CondVAE(nn.Module):
 
 
 class GoalVAE(nn.Module):
-    def __init__(self, latent_dim, n_non_loc=2, nloc_in=1024, drop_dim=2, dropout=0.1, inflate_d=[256, 128], inflate_k=[5, 2], min_std=0.01, n_mix=3):
+    def __init__(self, arm_latent, scene_latent, n_non_loc=2, nloc_in=1024, drop_dim=2, dropout=0.1, inflate_d=[256, 128], inflate_k=[5, 2], sdim=7, min_std=0.01, n_mix=3):
         super().__init__()
+        latent_dim = arm_latent + scene_latent
         self._l_dim = latent_dim
         self._embed = get_model('resnet')(use_resnet18=True, output_raw=True, drop_dim=drop_dim)
         self._enc_proc = nn.Sequential(nn.ReLU(), nn.Linear(1024, 1024), nn.ReLU(inplace=True))
@@ -66,10 +67,11 @@ class GoalVAE(nn.Module):
         self._min_std = min_std
         
         # layers for prior network
-        self._n_mix = n_mix
-        self._pri_mean = nn.Sequential(nn.Linear(1024, latent_dim * n_mix), nn.ReLU(inplace=True), nn.Linear(latent_dim * n_mix, latent_dim * n_mix))
-        self._pri_ln_std = nn.Sequential(nn.Linear(1024, latent_dim * n_mix), nn.ReLU(inplace=True), nn.Linear(latent_dim * n_mix, latent_dim * n_mix))
-        self._pri_alpha = nn.Sequential(nn.Linear(1024, latent_dim * n_mix), nn.ReLU(inplace=True), nn.Linear(latent_dim * n_mix, n_mix))
+        self._arm_latent_dim, self._scene_latent_dim = arm_latent, scene_latent
+        self.register_parameter('_arm_prior_mean', nn.Parameter(torch.zeros((2, arm_latent)), requires_grad=True))
+        self.register_parameter('_arm_prior_std', nn.Parameter(torch.ones((2, arm_latent)), requires_grad=True))
+        self._arm_type_classifier = nn.Linear(arm_latent, 2)
+        self._arm_state_regressor = nn.Sequential(nn.Linear(arm_latent, arm_latent), nn.ReLU(inplace=True), nn.Linear(arm_latent, sdim))
         
         # layers for posterior network
         self._pst_proc = nn.Sequential(nn.Linear(2048, 1024), nn.ReLU(inplace=True), nn.Linear(1024, 2 * latent_dim), nn.ReLU(inplace=True))
@@ -91,29 +93,37 @@ class GoalVAE(nn.Module):
         self._deconv2 = nn.Sequential(*deconv2)
         self._final_dec = nn.Sequential(nn.ConvTranspose2d(last, 64, 2, stride=2), nn.ReLU(inplace=True), nn.Conv2d(64, 3, 3, padding=1))
 
-    def forward(self, start, goal=None, ret_kl=False):
+    def forward(self, start, arm_label, goal=None):
         start_emb = self._embed(start)
         start_enc = self._spt_sft_feat(start_emb)
-        prior = [self._pri_mean(start_enc).reshape((start.shape[0], self._n_mix, self._l_dim)),
-                    F.softplus(self._pri_ln_std(start_enc).reshape((start.shape[0], self._n_mix, self._l_dim))) + self._min_std,
-                    F.softmax(self._pri_alpha(start_enc).reshape((start.shape[0], self._n_mix)), -1)]
+
+        prior_mean = torch.cat((self._arm_prior_mean[arm_label], 
+                                torch.zeros((start.shape[0], self._scene_latent_dim)).to(start.device)), 1)
+        prior_std = torch.cat((F.softplus(self._arm_prior_std[arm_label]) + self._min_std, 
+                                torch.ones((start.shape[0], self._scene_latent_dim)).to(start.device)), 1)
+        prior = Normal(prior_mean, prior_std)
 
         if goal is not None:
             goal_enc = self._spt_sft_feat(self._embed(goal))
             posterior_nn = self._pst_proc(torch.cat((goal_enc, start_enc), -1))
             posterior = Normal(self._pst_mean(posterior_nn), self._min_std + F.softplus(self._pst_ln_std(posterior_nn)))
-            latent, kl = posterior.rsample(), self._kl(posterior, prior)
+            latent, kl = posterior.rsample(), torch.sum(torch.distributions.kl_divergence(posterior, prior), -1)
         else:
-            latent, kl = self._sample_prior(prior), None
+            latent, kl = prior.rsample(), None
         
         dec_latent = self._dec_lin(latent).view((start.shape[0], 512, 2, 2))
         dec_conv = self._deconv1(dec_latent) + self._start_enc_pool(start_emb)
         dec_conv = self._deconv2(dec_conv)
         dec_out = self._final_dec(dec_conv)
 
-        if ret_kl:
-            return dec_out, kl
-        return dec_out
+        # aux predictions
+        arm_type_pred = self._arm_type_classifier(latent[:,:self._arm_latent_dim])
+        arm_pos_pred = self._arm_state_regressor(latent[:,:self._arm_latent_dim])
+
+        ret = {'pred': dec_out, 'aux_label': arm_type_pred, 'aux_pos': arm_pos_pred}
+        if kl is not None:
+            ret['kl'] = kl
+        return ret
 
     def _spt_sft_feat(self, feat):
         feat = F.softmax(feat.view((feat.shape[0], feat.shape[1], -1)), dim=2).view(feat.shape)
@@ -121,23 +131,6 @@ class GoalVAE(nn.Module):
         w = torch.sum(torch.linspace(-1, 1, feat.shape[3]).view((1, 1, -1)).to(feat.device) * torch.sum(feat, 2), 2)
         feat = torch.cat((h, w), 1)
         return self._enc_proc(feat)
-    
-    def _sample_prior(self, prior):
-        mean, std, alpha = prior
-        chosen_alpha = torch.distributions.Categorical(probs=alpha).sample()
-        mean = mean[range(mean.shape[0]), chosen_alpha]
-        std = std[range(std.shape[0]), chosen_alpha]
-        return Normal(mean, std).sample()
-
-    def _kl(self, posterior, prior):
-        kl = []
-        mean, std, alpha = prior
-        for i in range(self._n_mix):
-            p_i = Normal(mean[:,i], std[:,i])
-            kl_i = torch.sum(torch.distributions.kl_divergence(posterior, p_i), -1)
-            kl.append((kl_i * alpha[:,i]).unsqueeze(-1))
-        kl = torch.cat(kl, -1)
-        return torch.sum(kl, -1)
 
 
 class _VisDecoder(nn.Module):
