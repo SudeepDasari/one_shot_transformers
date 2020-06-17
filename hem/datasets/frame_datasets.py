@@ -10,6 +10,7 @@ import tqdm
 import multiprocessing
 from hem.datasets.util import split_files
 import json
+import pickle as pkl
 
 
 class _CachedTraj:
@@ -240,3 +241,53 @@ class SyncedFramesDataset(PairedFrameDataset):
     def _format_vid(self, vid):
         vid = [resize(crop(img, self._crop), self._im_dims, False) for img in vid]
         return np.transpose(randomize_video(vid, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize), (0, 3, 1, 2))
+
+
+class AuxContrastiveDataset(Dataset):
+    def __init__(self, root_dir, replay_buf=None, mode='train', split=[0.9, 0.1], target_downscale=4, img_width=320, img_height=240, rand_crop=None, color_jitter=None, rand_gray=None, g_sep=5, normalize=True, crop=None):
+        root_dir = os.path.expanduser(root_dir)
+        if replay_buf is not None:
+            trajs = []
+            for t in range(replay_buf):
+                trajs.extend(pkl.load(open('{}_{}.pkl'.format(root_dir, t), 'rb')))
+        else:
+            trajs = get_files(root_dir)
+        self._trajs = [trajs[i] for i in split_files(len(trajs), split, mode)]
+
+        self._ctxt_dims, self._target_dims = (img_width, img_height), (int(img_width / target_downscale), int(img_height / target_downscale))
+        self._color_jitter = color_jitter
+        self._rand_crop = rand_crop
+        self._rand_gray = rand_gray
+        self._g_sep = g_sep
+        self._normalize = normalize
+        self._crop = tuple(crop) if crop is not None else (0, 0, 0, 0)
+
+    def __len__(self):
+        return len(self._trajs)
+    
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+        traj = self._trajs[index]
+        traj = load_traj(traj) if isinstance(traj, str) else traj
+
+        is_agent = 'agent' in traj.config_str
+        obj_key = [k for k in traj[0]['obs'].keys() if all([b not in k for b in ('joint', 'eef', 'gripper')]) and 'pos' in k][0]
+        obj_pos = np.concatenate([traj[i]['obs'][obj_key][None] for i in range(len(traj))], 0)
+        t_q = int(np.random.randint(len(traj)))
+        valid_positives = [t for t in range(len(traj)) if np.linalg.norm(obj_pos[t] - obj_pos[t_q]) <= 0.02]
+        if len(valid_positives) > 1:
+            t_q_pos = traj.get(t_q, False)['obs']['eef_pos']
+            n_vp = [v for v in valid_positives if np.linalg.norm(traj.get(v, False)['obs']['eef_pos'] - t_q_pos) > 0.1]
+            valid_positives = n_vp if len(n_vp) else valid_positives
+        valid_positives = valid_positives if len(valid_positives) == 1 else [v for v in valid_positives if v != t_q]
+        t_p = int(np.random.choice(valid_positives))
+        t_n = int(np.random.choice([t for t in range(len(traj)) if np.linalg.norm(obj_pos[t] - obj_pos[t_q]) > 0.075]))
+        
+        img_q, img_p, img_n = [resize(crop(traj[fr]['obs']['image'], self._crop), self._ctxt_dims, False) for fr in (t_q, t_p, t_n)]
+        img_q, img_p, img_n  = [randomize_video([img], color_jitter=self._color_jitter, rand_gray=self._rand_gray, 
+                                    rand_crop=self._rand_crop, normalize=self._normalize)[0] for img in (img_q, img_p, img_n)]
+        img_q, img_p, img_n = [img.transpose((2, 0, 1)) for img in (img_q, img_p, img_n)]
+
+        pos = np.concatenate((traj[t_q]['obs']['ee_aa'], traj[t_q]['obs']['gripper_qpos'][:1]))if is_agent else np.zeros((8,))
+        return img_q, img_p, img_n, {'is_agent': is_agent, 'pos': pos.astype(np.float32)}

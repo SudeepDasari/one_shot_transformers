@@ -70,7 +70,7 @@ class Trainer:
         epochs = self._config.get('epochs', 1)
         vlm_alpha = self._config.get('vlm_alpha', 0.6)
         log_freq = self._config.get('log_freq', 20)
-        img_log_freq = self._config.get('img_log_freq', 500)
+        self._img_log_freq = img_log_freq = self._config.get('img_log_freq', 500)
         assert img_log_freq % log_freq == 0, "log_freq must divide img_log_freq!"
         save_freq = self._config.get('save_freq', 5000)
 
@@ -123,7 +123,7 @@ class Trainer:
                                 if len(v.shape) == 5:
                                     self._writer.add_video('{}/{}'.format(k, mode), v.cpu(), self._step)
                                 else:
-                                    v_grid = torchvision.utils.make_grid(v.cpu())
+                                    v_grid = torchvision.utils.make_grid(v.cpu(), padding=5)
                                     self._writer.add_image('{}/{}'.format(k, mode), v_grid, self._step)
                             elif not isinstance(v, torch.Tensor):
                                 self._writer.add_scalar('{}/{}'.format(k, mode), v, self._step)
@@ -182,3 +182,7 @@ class Trainer:
         if self._step is None:
             raise Exception("Optimization has not begun!")
         return self._step
+
+    @property
+    def is_img_log_step(self):
+        return self._step % self._img_log_freq == 0

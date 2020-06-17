@@ -60,19 +60,15 @@ def randomize_video(frames, color_jitter=None, rand_gray=None, rand_crop=None, r
     if rand_gray and np.random.uniform() < rand_gray:
         frames = [np.tile(cv2.cvtColor(fr, cv2.COLOR_RGB2GRAY)[:,:,None], (1,1,3)) for fr in frames]
     if rand_crop is not None:
-        r, c = [min(np.random.randint(p + 1), m-10) for p, m in zip(rand_crop, frames[0].shape[:2])]
-        if r:
-            pad_r = np.zeros((r, frames[0].shape[1], 3)).astype(frames[0].dtype)
-            if np.random.uniform() < 0.5:
-                frames = [np.concatenate((pad_r, fr[r:]), 0) for fr in frames]
-            else:
-                frames = [np.concatenate((fr[:-r], pad_r), 0) for fr in frames]
-        if c:                      
-            pad_c = np.zeros((frames[0].shape[0], c, 3)).astype(frames[0].dtype)
-            if np.random.uniform() < 0.5:
-                frames = [np.concatenate((pad_c, fr[:,c:]), 1) for fr in frames]
-            else:
-                frames = [np.concatenate((fr[:,:-c], pad_c), 1) for fr in frames]
+        r1, r2 = [np.random.randint(rand_crop[0]) for _ in range(2)]
+        c1, c2 = [np.random.randint(rand_crop[1]) for _ in range(2)]
+        
+        h, w = frames[0].shape[:2]
+        frames = [fr[r1:] for fr in frames]
+        frames = [fr[:-r2] for fr in frames] if r2 else frames
+        frames = [fr[:,c1:] for fr in frames]
+        frames = [fr[:,:-c2] for fr in frames] if c2 else frames
+        frames = [resize(fr, (w, h), normalize=False) for fr in frames]
     if rand_rot or any(rand_trans):
         rot = np.random.uniform(-rand_rot, rand_rot)
         trans = np.random.uniform(-rand_trans, rand_trans)

@@ -48,6 +48,9 @@ def get_dataset(name):
     elif name == 'goal image':
         from .image_gen_dataset import GoalImageDataset
         return GoalImageDataset
+    elif name == 'aux contrastive':
+        from .frame_datasets import AuxContrastiveDataset
+        return AuxContrastiveDataset
     raise NotImplementedError
 
 
