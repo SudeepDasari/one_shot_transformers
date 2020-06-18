@@ -268,6 +268,8 @@ class AuxContrastiveDataset(Dataset):
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
+
+        np.random.seed()
         traj = self._trajs[index]
         traj = load_traj(traj) if isinstance(traj, str) else traj
 

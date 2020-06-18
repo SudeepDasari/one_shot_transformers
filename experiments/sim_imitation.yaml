@@ -1,0 +1,35 @@
+batch_size: 12
+lr: 0.001
+epochs: 3000
+loader_workers: 8
+log_freq: 50
+n_sim_rollouts: 8
+img_log_freq: 1000
+teacher_sim: PandaPickPlaceDistractor
+agent_sim: SawyerPickPlaceDistractor
+
+dataset:
+  type: "agent teacher"
+  agent_dir: ${EXPERT_DATA}/sawyer/*.pkl
+  teacher_dir: ${EXPERT_DATA}/panda/*.pkl
+  T_context: 2
+  agent_context: 0
+  T_pair: 15
+  height: 240
+  width: 320
+  crop: [100, 0, 0, 0]
+  rand_crop: [12, 16]
+  color_jitter: [0.2, 0.3, 0.3]
+  freq: 10
+  sample_sides: True
+  state_spec: [robot-state]
+  action_spec: ['joint_pos', 'grip_action']
+  min_frame: 1
+
+policy:
+  T_context: 2
+  sdim: 30
+  action_lstm:
+    in_dim: 50
+    out_dim: 32
+  visual_restore: ${PRETRAIN}

@@ -6,6 +6,39 @@ import torch.nn.functional as F
 from torch.distributions import MultivariateNormal
 import numpy as np
 from hem.models.traj_embed import _NonLocalLayer
+from hem.models.contrastive_module import SplitContrastive
+
+
+class ConditionedPolicy(nn.Module):
+    def __init__(self, T_context, action_lstm, context_dim=32, adim=8, sdim=8, n_mixtures=3, agent_latent=8, scene_latent=32, visual_restore=None):
+        super().__init__()
+        if visual_restore is not None:
+            self._embed = torch.load(visual_restore, map_location=torch.device('cpu'))
+        else:
+            self._embed = SplitContrastive(agent_latent, scene_latent)
+        
+        vis_dim, hidden_dim = scene_latent + agent_latent, scene_latent + agent_latent + sdim + context_dim
+        self._context_proc = nn.Sequential(nn.Linear(T_context * vis_dim, T_context * vis_dim), nn.ReLU(inplace=True), nn.Linear(T_context * vis_dim, context_dim))
+        self._in_proc = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(inplace=True), nn.Linear(hidden_dim, action_lstm['in_dim']))
+        self._action_lstm = nn.LSTM(action_lstm['in_dim'], action_lstm['out_dim'], action_lstm.get('n_layers', 1))
+        self._mdn = MixtureDensityTop(action_lstm['out_dim'], adim, n_mixtures)
+    
+    def forward(self, states, context):
+        context_embed = self.embed_image(context)
+        img_embed = self.embed_image(states['images'])
+
+        context_embed = self._context_proc(context_embed.view((context_embed.shape[0], -1))).unsqueeze(1)
+        lstm_in = self._in_proc(torch.cat((context_embed.repeat((1, img_embed.shape[1], 1)), img_embed, states['states']), 2))
+        lstm_out, _ = self._action_lstm(lstm_in, None)
+        mu, sigma_inv, alpha = self._mdn(lstm_out)
+        return GMMDistribution(mu, sigma_inv, alpha)
+    
+    def embed_image(self, image):
+        img = image.reshape((image.shape[0] * image.shape[1], image.shape[2], image.shape[3], image.shape[4]))
+        embeds = self._embed(img)
+        arm_latent = embeds['arm_feat'].view((image.shape[0], image.shape[1], -1))
+        scene_latent = embeds['scene_feat'].view((image.shape[0], image.shape[1], -1))
+        return torch.cat((arm_latent, scene_latent), -1)
 
 
 class _Prior(nn.Module):

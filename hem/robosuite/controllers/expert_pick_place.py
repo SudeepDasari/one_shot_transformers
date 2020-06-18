@@ -133,6 +133,20 @@ class PickPlaceController:
         p.disconnect()
 
 
+def post_proc_obs(obs):
+    if 'image' in obs:
+        obs['image'] = obs['image'][80:]
+    if 'depth' in obs:
+        obs['depth'] = obs['depth'][80:]
+
+    quat = Quaternion(obs['eef_quat'][[3, 0, 1, 2]])
+    aa = np.concatenate(([quat.angle / np.pi], quat.axis)).astype(np.float32)
+    if aa[0] < 0:
+        aa[0] += 2
+    obs['ee_aa'] = np.concatenate((obs['eef_pos'], aa)).astype(np.float32)
+    return obs
+
+
 def get_expert_trajectory(env_type, camera_obs=True, renderer=False):
     success, use_object = False, ''
     while not success:
@@ -150,24 +164,13 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False):
         use_object = env.item_names_org[env.object_id].lower()
         controller = PickPlaceController(env)
 
-        traj.append(obs, raw_state=mj_state)
+        traj.append(post_proc_obs(obs), raw_state=mj_state)
         for _ in range(env.horizon):
             action = controller.act(obs)
             obs, reward, done, info = env.step(action)
-            
-            if 'image' in obs:
-                obs['image'] = obs['image'][80:]
-            if 'depth' in obs:
-                obs['depth'] = obs['depth'][80:]
-
-            quat = Quaternion(obs['eef_quat'][[3, 0, 1, 2]])
-            aa = np.concatenate(([quat.angle / np.pi], quat.axis)).astype(np.float32)
-            if aa[0] < 0:
-                aa[0] += 2
-            obs['ee_aa'] = np.concatenate((obs['eef_pos'], aa)).astype(np.float32)
 
             mj_state = env.sim.get_state().flatten()
-            traj.append(obs, reward, done, info, action, mj_state)
+            traj.append(post_proc_obs(obs), reward, done, info, action, mj_state)
             
             if reward:
                 success = True

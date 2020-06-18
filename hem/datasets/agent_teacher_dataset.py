@@ -11,24 +11,28 @@ from hem.datasets.util import split_files
 
 
 class AgentTeacherDataset(Dataset):
-    def __init__(self, agent_dir, teacher_dir, **params):
-        self._agent_dataset = AgentDemonstrations(agent_dir, **params)
-        self._teacher_dataset = TeacherDemonstrations(teacher_dir, **params)
+    def __init__(self, agent_dir, teacher_dir, agent_context=None, **params):
+        teacher_context = params.pop('T_context', 15)
+        self._agent_context = agent_context = agent_context if agent_context is not None else teacher_context
+        self._agent_dataset = AgentDemonstrations(agent_dir, T_context=agent_context, **params)
+        self._teacher_dataset = TeacherDemonstrations(teacher_dir, T_context=teacher_context, **params)
+        assert len(self._agent_dataset) == len(self._teacher_dataset)
     
     def __len__(self):
-        return len(self._agent_dataset) * len(self._teacher_dataset)
+        return len(self._agent_dataset)
     
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
         assert 0 <= index < len(self), "invalid index!"
 
-        a_idx = index % len(self._agent_dataset)
-        t_idx = int(index // len(self._agent_dataset))
-
-        agent_pairs, agent_context = self._agent_dataset[a_idx]
-        teacher_context = self._teacher_dataset[t_idx]
-        return teacher_context, agent_context, agent_pairs
+        np.random.seed()
+        agent_pairs, agent_context = self._agent_dataset[index]
+        teacher_context = self._teacher_dataset[index]
+        
+        if self._agent_context:
+            return teacher_context, agent_context, agent_pairs
+        return teacher_context, agent_pairs
 
 
 class PairedAgentTeacherDataset(Dataset):

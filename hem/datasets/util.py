@@ -94,3 +94,21 @@ def split_files(file_len, splits, mode='train'):
     else:
         order = order[pivot:]
     return order
+
+
+def select_random_frames(frames, n_select, sample_sides=False):
+    selected_frames = []
+    clip = lambda x : int(max(0, min(x, len(frames) - 1)))
+    per_bracket = max(len(frames) / n_select, 1)
+
+    for i in range(n_select):
+        n = clip(np.random.randint(int(i * per_bracket), int((i + 1) * per_bracket)))
+        if sample_sides and i == 0:
+            n = 0
+        elif sample_sides and i == n_select - 1:
+            n = len(frames) - 1
+        selected_frames.append(n)
+
+    if isinstance(frames, (list, tuple)):
+        return [frames[i] for i in selected_frames]
+    return frames[selected_frames]

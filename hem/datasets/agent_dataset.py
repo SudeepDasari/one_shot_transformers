@@ -15,7 +15,7 @@ import pickle as pkl
 
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
-                 T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False,
+                 T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False, min_frame=0,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, rep_buffer=0, target_vid=False, reduce_bits=False):
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or T_pair > 0, "Must return (s,a) pairs or context!"
@@ -55,6 +55,7 @@ class AgentDemonstrations(Dataset):
         self._sample_sides = sample_sides
         self._target_vid = target_vid
         self._reduce_bits = reduce_bits
+        self._min_frame = min_frame
 
     def __len__(self):
         return len(self._trajs)
@@ -93,7 +94,7 @@ class AgentDemonstrations(Dataset):
         for i in range(self._T_context):
             n = clip(np.random.randint(int(i * per_bracket), int((i + 1) * per_bracket)))
             if self._sample_sides and i == 0:
-                n = 0
+                n = self._min_frame
             elif self._sample_sides and i == self._T_context - 1:
                 n = len(traj) - 1
             frames.append(_make_frame(n))
@@ -105,6 +106,9 @@ class AgentDemonstrations(Dataset):
         def _get_tensor(k, t):
             if k == 'action':
                 return t['action']
+            elif k == 'grip_action':
+                return [t['action'][-1]]
+
             o = t['obs']
             if k == 'ee_aa' and 'ee_aa' not in o:
                 ee, axis_angle = o['ee_pos'][:3], o['axis_angle']
