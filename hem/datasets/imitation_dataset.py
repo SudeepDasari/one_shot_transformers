@@ -1,8 +1,8 @@
 from torch.utils.data import Dataset
 from .agent_dataset import AgentDemonstrations
 from .teacher_dataset import TeacherDemonstrations
-from hem.datasets import load_traj
-from hem.datasets.util import randomize_video, split_files, resize
+from hem.datasets import load_traj, get_files
+from hem.datasets.util import randomize_video, split_files, resize, crop
 import torch
 import os
 import numpy as np
@@ -152,56 +152,54 @@ class StateDatasetVisionContext(StateDataset):
 
 
 class AuxDataset(Dataset):
-    def __init__(self, root_dir, img_width=320, img_height=240, rand_crop=None, color_jitter=None, rand_gray=None, split=[0.9, 0.1], mode='train', center=False):
-        self._img_dir = os.path.expanduser(root_dir)
-        self._img_height, self._img_width = img_height, img_width
-        self._human_grip_times = json.load(open(os.path.join(self._img_dir, 'human_grip_timings.json'), 'r'))
-        self._file_inds = split_files(len(self._human_grip_times), split, mode)
+    def __init__(self, agent_dir, teacher_dir, img_width=320, img_height=240, crop=(0,0,0,0), rand_crop=None, color_jitter=None, rand_gray=None, split=[0.9, 0.1], mode='train', is_sim=False, min_index=0):
+        self._agent_files = get_files(agent_dir)
+        self._teacher_files = get_files(teacher_dir)
+        assert len(self._agent_files) == len(self._teacher_files), "file length mismatch!"
+        split = split_files(len(self._agent_files), split, mode)
+        self._agent_files, self._teacher_files = [self._agent_files[o] for o in split], [self._teacher_files[o] for o in split]
+
+        self._img_dims = (img_width, img_height)
+        self._crop = crop
         self._color_jitter = color_jitter
         self._rand_crop = rand_crop
         self._rand_gray = rand_gray
-        self._center = center
+        self._is_sim = is_sim
+        self._min_index = min_index
     
     def __len__(self):
-        return len(self._file_inds)
+        return len(self._agent_files)
 
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
+        robot_traj, teacher_traj = load_traj(self._agent_files[index]), load_traj(self._teacher_files[index])
 
-        traj_ind = self._file_inds[index]
-        robot_traj = load_traj(os.path.join(self._img_dir, 'traj{}_robot.pkl'.format(traj_ind)))
-        robot_frame = robot_traj[0]['obs']['image']
-        obj_detected = np.concatenate([robot_traj.get(t, False)['obs']['object_detected'] for t in range(len(robot_traj))])
-        qpos = np.concatenate([robot_traj.get(t, False)['obs']['gripper_qpos'] for t in range(len(robot_traj))])
-        if obj_detected.any():
-            grip_t = int(np.argmax(obj_detected))
-            drop_t = min(len(robot_traj) - 1, int(len(robot_traj) - np.argmax(obj_detected[::-1])))
+        # grab context and robot frames
+        context_frames = [resize(crop(teacher_traj[t]['obs']['image'], self._crop), self._img_dims, False) for t in (self._min_index, len(teacher_traj) - 1)]
+        context_frames = randomize_video(context_frames, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
+        robot_frame = resize(crop(robot_traj[self._min_index]['obs']['image'], self._crop), self._img_dims, False)
+        robot_frame = randomize_video([robot_frame], color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True)[0].transpose((2, 0, 1))        
+
+        if self._is_sim:
+            grip_ac = np.array([robot_traj.get(t, False)['action'][-1] for t in range(1, len(robot_traj))])
+            grip = robot_traj.get(np.argmax(grip_ac > 0) + 1, False)['obs']['ee_aa']
+            drop = robot_traj.get(len(grip_ac) - np.argmax(grip_ac[::-1] < 0), False)['obs']['ee_aa']
         else:
-            closed = np.isclose(qpos, 0)
-            grip_t = int(np.argmax(closed))
-            drop_t = min(len(robot_traj) - 1, int(len(robot_traj) - np.argmax(closed[::-1])))
-        grip, drop = robot_traj.get(grip_t, False), robot_traj.get(drop_t, False)
-        grip = np.concatenate((grip['obs']['ee_pos'][:3], grip['obs']['axis_angle'])).astype(np.float32)
-        drop = np.concatenate((drop['obs']['ee_pos'][:3], drop['obs']['axis_angle'])).astype(np.float32)
-        for x in (grip, drop):
-            if x[3] < 0:
-                x[3] += 2
-        if self._center:
-            mean = np.array([0.647, 0.0308, 0.10047, 1, 0.1464, 0.1464, 0.010817]).reshape((-1))
-            std = np.array([0.231, 0.447, 0.28409, 0.04, 0.854, 0.854, 0.0653]).reshape((-1))
-            for tensor in [grip, drop]:
-                tensor[:7] -= mean.astype(np.float32)
-                tensor[:7] /= std.astype(np.float32)
+            obj_detected = np.concatenate([robot_traj.get(t, False)['obs']['object_detected'] for t in range(len(robot_traj))])
+            qpos = np.concatenate([robot_traj.get(t, False)['obs']['gripper_qpos'] for t in range(len(robot_traj))])
+            if obj_detected.any():
+                grip_t = int(np.argmax(obj_detected))
+                drop_t = min(len(robot_traj) - 1, int(len(robot_traj) - np.argmax(obj_detected[::-1])))
+            else:
+                closed = np.isclose(qpos, 0)
+                grip_t = int(np.argmax(closed))
+                drop_t = min(len(robot_traj) - 1, int(len(robot_traj) - np.argmax(closed[::-1])))
+            grip, drop = robot_traj.get(grip_t, False), robot_traj.get(drop_t, False)
+            grip = np.concatenate((grip['obs']['ee_pos'][:3], grip['obs']['axis_angle'])).astype(np.float32)
+            drop = np.concatenate((drop['obs']['ee_pos'][:3], drop['obs']['axis_angle'])).astype(np.float32)
+            for x in (grip, drop):
+                if x[3] < 0:
+                    x[3] += 2
         
-        human_vid = load_traj(os.path.join(self._img_dir, 'traj{}_human.pkl'.format(traj_ind)))
-        grip_time = self._human_grip_times['traj{}_human.pkl'.format(traj_ind)]
-        start_time = 0 if grip_time < 8 else np.random.randint(6)
-        end_time = len(human_vid) - np.random.randint(1, 6)
-        start, mid, end = [human_vid[t]['obs']['image'] for t in (start_time, grip_time, end_time)]
-
-        robot_frame = [resize(robot_frame, (self._img_width, self._img_height), False)]
-        robot_frame = randomize_video(robot_frame, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
-        context = [resize(i, (self._img_width, self._img_height), False) for i in (start, mid, end)]
-        context = randomize_video(context, color_jitter=self._color_jitter, rand_gray=self._rand_gray, rand_crop=self._rand_crop, normalize=True).transpose((0, 3, 1, 2))
-        return np.concatenate((robot_frame, context), 0).astype(np.float32), np.concatenate((grip, drop)).astype(np.float32)
+        return context_frames, robot_frame, np.concatenate((grip, drop)).astype(np.float32)

@@ -53,8 +53,7 @@ class Trajectory:
         return self.get(t)
 
     def get(self, t, decompress=True):
-        assert isinstance(t, int), "t should be an integer value!"
-        assert 0 <= t < self.T, "index should be in [0, T)"
+        assert 0 <= t < self.T or -self.T < t <= 0, "index should be in (-T, T)"
         
         obs_t, reward_t, done_t, info_t, action_t = copy.deepcopy(self._data[t])
         if decompress:
@@ -74,7 +73,7 @@ class Trajectory:
             yield self.get(d)
 
     def get_raw_state(self, t):
-        assert 0 <= t < self.T, "index should be in [0, T)"
+        assert 0 <= t < self.T or -self.T < t <= 0, "index should be in (-T, T)"
         return copy.deepcopy(self._raw_state[t])
 
     def set_config_str(self, config_str):

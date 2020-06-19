@@ -41,6 +41,27 @@ class ConditionedPolicy(nn.Module):
         return torch.cat((arm_latent, scene_latent), -1)
 
 
+class GoalStateRegression(ConditionedPolicy):
+    def __init__(self, T_context, out_dim, agent_latent=8, scene_latent=32, visual_restore=None, constant_embed=False):
+        nn.Module.__init__(self)
+        if visual_restore is not None:
+            self._embed = torch.load(visual_restore, map_location=torch.device('cpu'))
+        else:
+            assert not constant_embed
+            self._embed = SplitContrastive(agent_latent, scene_latent)
+        if constant_embed:
+            for p in self._embed.parameters():
+                p.requires_grad=False
+
+        hidden_dim = (T_context + 1) * (agent_latent + scene_latent)
+        self._top = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(inplace=True), nn.Linear(hidden_dim, out_dim))
+
+    def forward(self, context, image):
+        embeds = self.embed_image(torch.cat((context, image[:,None]), 1))
+        embeds = embeds.view((context.shape[0], -1))
+        return self._top(embeds)
+
+
 class _Prior(nn.Module):
     def __init__(self, latent_dim, state_dim, context_dim, T):
         super().__init__()

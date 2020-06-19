@@ -1,0 +1,20 @@
+batch_size: 16
+lr: 0.01
+epochs: 3000
+loader_workers: 0
+
+
+dataset:
+  type: "pick place"
+  agent_dir: ${EXPERT_DATA}/sawyer/*.pkl
+  teacher_dir: ${EXPERT_DATA}/panda/*.pkl
+  crop: [100, 0, 0, 0]
+  rand_crop: [12, 16]
+  color_jitter: [0.2, 0.3, 0.3]
+  is_sim: True
+  min_index: 1
+
+policy:
+  T_context: 2
+  visual_restore: ${PRETRAIN}
+  out_dim: 14
