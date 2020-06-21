@@ -1,5 +1,4 @@
 from pyquaternion import Quaternion
-from robosuite.wrappers.ik_wrapper import IKWrapper
 from robosuite.environments.baxter import BaxterEnv
 from robosuite.environments.sawyer import SawyerEnv
 from robosuite.environments.panda import PandaEnv
@@ -11,7 +10,7 @@ from hem.datasets import Trajectory
 import pybullet as p
 from pyquaternion import Quaternion
 import random
-import robosuite.utils.transform_utils as T
+from hem.robosuite.custom_ik_wrapper import normalize_action
 
 
 def _clip_delta(delta, max_step=0.015):
@@ -62,14 +61,15 @@ class PickPlaceController:
         if 'Milk' in self._object_name:
             self._clearance = -0.03
     
-    def _get_target_pose(self, delta_pos, quat, max_step=None):
+    def _get_target_pose(self, delta_pos, base_pos, quat, max_step=None):
         if max_step is None:
             max_step = self._default_speed
 
         delta_pos = _clip_delta(delta_pos, max_step)
-        quat = np.array([quat.x, quat.y, quat.z, quat.w])
-        quat = T.quat_multiply(T.quat_inverse(self._env._right_hand_quat), quat)
-        return np.concatenate((delta_pos, quat))
+        quat = np.concatenate(([quat.angle / np.pi], quat.axis))
+        if quat[0] < 0:
+            quat[0] += 1
+        return normalize_action(np.concatenate((delta_pos + base_pos, quat)))
 
     def act(self, obs):
         if self._t == 0:
@@ -80,30 +80,22 @@ class PickPlaceController:
 
         if self._t < 15:
             quat_t = Quaternion.slerp(self._base_quat, self._target_quat, min(1, float(self._t) / 5))
-            eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, self._hover_delta], quat_t)
+            eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, self._hover_delta], obs['eef_pos'], quat_t)
             action = np.concatenate((eef_pose, [-1]))
         elif self._t < 25: 
             if self._t  < self._rise_t:
-                eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] - [0, 0, self._clearance], self._target_quat)  
+                eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] - [0, 0, self._clearance], obs['eef_pos'], self._target_quat)  
                 action = np.concatenate((eef_pose, [-1]))
             else:
-                eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, self._hover_delta], self._target_quat)
+                eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, self._hover_delta], obs['eef_pos'], self._target_quat)
                 action = np.concatenate((eef_pose, [1]))
 
         elif np.linalg.norm(self._target_loc - obs[self._obs_name]) > self._final_thresh: 
-            target = self._target_loc
-            # if self._intermediate_reached:
-            #     target = self._target_loc
-            # elif np.linalg.norm(self._intermediate_point - obs[self._obs_name]) < 1e-2:
-            #     target = self._target_loc
-            #     self._intermediate_reached = True
-            # else:
-            #     target = self._intermediate_point
-            
-            eef_pose = self._get_target_pose(target - obs[self._obs_name], self._target_quat)
+            target = self._target_loc        
+            eef_pose = self._get_target_pose(target - obs[self._obs_name], obs['eef_pos'], self._target_quat)
             action = np.concatenate((eef_pose, [1]))
         else:
-            eef_pose = self._get_target_pose(np.zeros(3), self._target_quat)
+            eef_pose = self._get_target_pose(np.zeros(3), obs['eef_pos'], self._target_quat)
             action = np.concatenate((eef_pose, [-1]))
         
         self._t += 1
@@ -137,9 +129,8 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None):
 
     while not success:
         np.random.seed()
-        env = get_env(env_type)(force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
-        controller = PickPlaceController(env)
-        env = IKWrapper(env, action_repeat=10)
+        env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
+        controller = PickPlaceController(env.env)
         obs = env.reset()
         mj_state = env.sim.get_state().flatten()
         sim_xml = env.model.get_xml()
