@@ -1,4 +1,4 @@
-batch_size: 12
+batch_size: 10
 lr: 0.001
 epochs: 3000
 loader_workers: 8
@@ -14,17 +14,14 @@ dataset:
   teacher_dir: ${EXPERT_DATA}/panda/*.pkl
   T_context: 2
   agent_context: 0
-  T_pair: 15
+  T_pair: 20
   height: 240
   width: 320
   crop: [100, 0, 0, 0]
   rand_crop: [12, 16]
   color_jitter: [0.2, 0.3, 0.3]
-  freq: 10
   sample_sides: True
   state_spec: [robot-state]
-  action_spec: ['joint_pos', 'grip_action']
-  min_frame: 1
 
 policy:
   T_context: 2

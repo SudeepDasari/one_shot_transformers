@@ -1,5 +1,5 @@
 try:
-    # from mujoco_py import load_model_from_xml, MjSim, MjRenderContextOffscreen
+    from mujoco_py import load_model_from_xml, MjSim, MjRenderContextOffscreen
     from hem.robosuite import postprocess_model_xml
 except:
     # in case experiments don't require rendering ignore failure
@@ -7,7 +7,7 @@ except:
 
 
 class ImageRenderWrapper:
-    def __init__(self, traj, height=None, width=None, depth=False, no_render=False):
+    def __init__(self, traj, height=320, width=320, depth=False, no_render=False):
         self._height = height
         self._width = width
         self._sim = None
@@ -15,9 +15,9 @@ class ImageRenderWrapper:
         self._depth = depth
         self._no_render = no_render
 
-    def get(self, t):
+    def get(self, t, decompress=True):
         ret = self._traj[t]
-        if 'image' not in ret['obs'] and not self._no_render:
+        if decompress and 'image' not in ret['obs'] and not self._no_render:
             sim = self._get_sim()
             sim.set_state_from_flattened(self._traj.get_raw_state(t))
             sim.forward()
@@ -26,7 +26,7 @@ class ImageRenderWrapper:
                 ret['obs']['image'] = image[:,::-1]
                 ret['obs']['depth'] = self._proc_depth(depth[:,::-1])
             else:
-                ret['obs']['image'] = sim.render(camera_name='frontview', width=self._width, height=self._height, depth=False)[:,::-1]
+                ret['obs']['image'] = sim.render(camera_name='frontview', width=self._width, height=self._height, depth=False)[80:,::-1]
         return ret
 
     def _proc_depth(self, depth):
@@ -46,6 +46,9 @@ class ImageRenderWrapper:
             self._depth_norm = 'sawyer'
         elif 'baxter' in xml:
             from hem.datasets.precompiled_models.baxter import models
+            self._sim = models[0]
+        elif 'panda' in xml:
+            from hem.datasets.precompiled_models.panda import models
             self._sim = models[0]
         else:
             model = load_model_from_xml(xml)

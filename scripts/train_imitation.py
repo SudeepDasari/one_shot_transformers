@@ -7,6 +7,7 @@ from hem.datasets.util import STD, MEAN, select_random_frames, resize, crop
 try:
     from hem.robosuite import get_env
     from hem.robosuite.controllers.expert_pick_place import get_expert_trajectory, post_proc_obs
+    from robosuite.wrappers.ik_wrapper import IKWrapper
     mujoco_import = True
 except:
     mujoco_import = False
@@ -36,7 +37,7 @@ if __name__ == '__main__':
             summary_vids, cond_frames, n_success = [], [], 0
             img_dims = (config['dataset'].get('width', 224), config['dataset'].get('height', 224))
             crop_params, norm = config['dataset'].get('crop', (0, 0, 0, 0)), config['dataset'].get('normalize', True)
-            T_context, repeat = config['policy']['T_context'], config['dataset'].get('freq', 1)
+            T_context, repeat = config['policy']['T_context'], config.get('repeat', 10)
             horizon = config['dataset']['T_pair']
 
             for _ in range(config['n_sim_rollouts']):
@@ -49,6 +50,7 @@ if __name__ == '__main__':
                 context_images = torch.from_numpy(context_images).to(device)
 
                 env = get_env(config['agent_sim'])(has_renderer=False, use_camera_obs=True, camera_height=320, camera_width=320)
+                env = IKWrapper(env, action_repeat=repeat)
                 obs = env.reset()
                 summary_vid, states, imgs, success = [obs['image'].astype(np.float32).transpose(2, 0, 1)[None] / 255], [], [], False
                 obs = post_proc_obs(obs)
@@ -63,19 +65,16 @@ if __name__ == '__main__':
                                 'images': torch.from_numpy(np.concatenate(imgs, 0)).to(device)[None]}
                     action_dist = m(model_in, context_images)
                     action = action_dist.mean[0,-1].cpu().numpy()
-                    for _ in range(repeat):
-                        pd = np.clip(-0.4 * (obs['joint_pos'] - action[:7]), -1, 1)
-                        grip = 1 if action[-1] > 0 else -1
-                        a = np.concatenate((pd, [grip]))
-                        obs, reward, done, _ = env.step(a)
-                        success = True if reward else success
-                        summary_vid.append(obs['image'].astype(np.float32).transpose(2, 0, 1)[None] / 255)
-                        obs = post_proc_obs(obs)
-                        if done:
-                            break
-
+                    action[3:7] /= np.linalg.norm(action[3:7])
+                    action[-1] = 1 if action[-1] > 0 else -1
+                        
+                    obs, reward, done, _ = env.step(action)
+                    success = True if reward else success
+                    summary_vid.append(obs['image'].astype(np.float32).transpose(2, 0, 1)[None] / 255)
+                    obs = post_proc_obs(obs)
                     if done or success:
                         break
+                    
                 summary_vid = select_random_frames(summary_vid, 30, True)
                 summary_vids.append(np.concatenate(summary_vid, 0)[None])
                 n_success += int(success)

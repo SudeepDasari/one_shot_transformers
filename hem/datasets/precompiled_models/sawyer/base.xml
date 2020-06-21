@@ -40,12 +40,12 @@
 
   <actuator>
   <velocity ctrllimited="true" ctrlrange="-1.74 1.74" joint="right_j0" kv="8.0" name="vel_right_j0" />
-        <velocity ctrllimited="true" ctrlrange="-1.328 1.328" joint="right_j1" kv="7.0" name="vel_right_j1" />
-        <velocity ctrllimited="true" ctrlrange="-1.957 1.957" joint="right_j2" kv="6.0" name="vel_right_j2" />
-        <velocity ctrllimited="true" ctrlrange="-1.957 1.957" joint="right_j3" kv="4.0" name="vel_right_j3" />
-        <velocity ctrllimited="true" ctrlrange="-3.485 3.485" joint="right_j4" kv="2.0" name="vel_right_j4" />
-        <velocity ctrllimited="true" ctrlrange="-3.485 3.485" joint="right_j5" kv="0.5" name="vel_right_j5" />
-        <velocity ctrllimited="true" ctrlrange="-4.545 4.545" joint="right_j6" kv="0.1" name="vel_right_j6" />
+    <velocity ctrllimited="true" ctrlrange="-1.328 1.328" joint="right_j1" kv="7.0" name="vel_right_j1" />
+    <velocity ctrllimited="true" ctrlrange="-1.957 1.957" joint="right_j2" kv="6.0" name="vel_right_j2" />
+    <velocity ctrllimited="true" ctrlrange="-1.957 1.957" joint="right_j3" kv="4.0" name="vel_right_j3" />
+    <velocity ctrllimited="true" ctrlrange="-3.485 3.485" joint="right_j4" kv="2.0" name="vel_right_j4" />
+    <velocity ctrllimited="true" ctrlrange="-3.485 3.485" joint="right_j5" kv="0.5" name="vel_right_j5" />
+    <velocity ctrllimited="true" ctrlrange="-4.545 4.545" joint="right_j6" kv="0.1" name="vel_right_j6" />
   <position ctrllimited="true" ctrlrange="-0.0115 0.020833" forcelimited="true" forcerange="-20 20" joint="r_gripper_r_finger_joint" kp="10000" name="gripper_r_gripper_r_finger_joint" />
         <position ctrllimited="true" ctrlrange="-0.020833 0.0115" forcelimited="true" forcerange="-20 20" joint="r_gripper_l_finger_joint" kp="10000" name="gripper_r_gripper_l_finger_joint" />
     </actuator>
@@ -121,7 +121,7 @@
           <geom pos="0.08 0 0.23" rgba="0.5 0.1 0.1 1" size="0.07" />
           <body name="head" pos="0 0 0.2965">
             <inertial diaginertia="0.0118334 0.00827089 0.00496574" mass="1.5795" pos="0.0053207 -2.6549e-05 0.1021" quat="0.999993 7.08405e-05 -0.00359857 -0.000626247" />
-            <joint axis="0 0 1" limited="true" name="head_pan" pos="0 0 0" range="-5.0952 0.9064" />
+            
             <geom conaffinity="0" contype="0" group="1" mesh="head" rgba="0.5 0.1 0.1 1" type="mesh" />
             <geom pos="0 0 0.08" rgba="0.5 0.1 0.1 1" size="0.018" />
             <body name="screen" pos="0.03 0 0.105" quat="0.5 0.5 0.5 0.5">
@@ -176,9 +176,13 @@
                       <geom conaffinity="0" contype="0" group="1" mesh="l6" rgba="0.5 0.1 0.1 1" type="mesh" />
                       <geom pos="0 0.015 -0.01" rgba="0.5 0.1 0.1 1" size="0.055 0.025" type="cylinder" />
                       <body name="right_hand" pos="0 0 0.0245" quat="0.707105 0 0 0.707108">
+                                            
+                                            <site group="1" name="ee" pos="0 0 0" rgba="0 0 1 1" size="0.01 0.01 0.01" type="sphere" />
+                                            <site group="1" name="ee_x" pos="0 0 0" quat="0.707105 0.707108 0 0 " rgba="1 0 0 0" size="0.005 .1" type="cylinder" />
+                                            <site group="1" name="ee_z" pos="0 0 0" quat="0.707105 0 0 0.707108" rgba="0 0 1 0" size="0.005 .1" type="cylinder" />
+                                            <site group="1" name="ee_y" pos="0 0 0" quat="0.707105 0 0.707108 0 " rgba="0 1 0 0" size="0.005 .1" type="cylinder" />
                                               
-                                          <inertial diaginertia="1e-08 1e-08 1e-08" mass="1e-08" pos="1e-08 1e-08 1e-08" quat="0.820473 0.339851 -0.17592 0.424708" />
-        <geom size="1e-08 5e-09" type="cylinder" />
+                                          <geom size="1e-08 5e-09" type="cylinder" />
         <body name="right_gripper_base" pos="0 0 0.025">
             <inertial diaginertia="3e-08 2e-08 2e-08" mass="0.3" pos="0 0 0" quat="-0.5 0.5 0.5 0.5" />
             <geom conaffinity="0" contype="0" group="1" mesh="electric_gripper_base" quat="0 0 0.707107 0.707107" type="mesh" />
@@ -241,16 +245,16 @@
         </body>
       </body>
     </body>
-  <body name="Milk0" pos="0.4936100887996095 -0.3129844365691434 0.885" quat="0.7941927474808789 0 0 0.6076659278326975">
+  <body name="Milk0" pos="0.5355742662324439 -0.11881681478362066 0.885" quat="-0.928678147285653 0 0 0.37088663868369126">
         <geom condim="4" density="100" friction="0.95 0.3 0.1" group="1" material="ceramic" mesh="milk_mesh" name="Milk0" pos="0 0 0" solimp="0.998 0.998 0.001" solref="0.001 1" type="mesh" />
       <site name="Milk0" pos="0 0 0" rgba="1 0 0 0" size="0.002 0.002 0.002" type="sphere" /><joint damping="0.0005" name="Milk0" type="free" /></body>
-      <body name="Bread0" pos="0.4917099913002006 -0.24373193116819858 0.8450000000000001" quat="-0.8428006272381188 0 0 0.5382258844825596">
+      <body name="Bread0" pos="0.49305340863890956 -0.03545613673659828 0.8450000000000001" quat="-0.9613223201225349 0 0 0.2754258463438506">
         <geom condim="4" density="50" friction="0.95 0.3 0.1" group="1" material="bread" mesh="bread_mesh" name="Bread0" pos="0 0 0" solimp="0.998 0.998 0.001" solref="0.001 1" type="mesh" />
       <site name="Bread0" pos="0 0 0" rgba="1 0 0 0" size="0.002 0.002 0.002" type="sphere" /><joint damping="0.0005" name="Bread0" type="free" /></body>
-      <body name="Cereal0" pos="0.6885395498991516 -0.1710434502039063 0.8500000000000001" quat="-0.801214853139277 0 0 0.5983767701950059">
+      <body name="Cereal0" pos="0.5142219019902523 -0.3155282822920234 0.8500000000000001" quat="-0.649747989360661 0 0 0.7601496894176688">
         <geom condim="4" density="150" friction="0.95 0.3 0.1" group="1" material="cereal" mesh="cereal_mesh" name="Cereal0" pos="0 0 0" solimp="0.998 0.998 0.001" solref="0.001 1" type="mesh" />
       <site name="Cereal0" pos="0 0 0" rgba="1 0 0 0" size="0.002 0.002 0.002" type="sphere" /><joint damping="0.0005" name="Cereal0" type="free" /></body>
-      <body name="Can0" pos="0.6171387333793129 -0.060826792804978574 0.8600000000000001" quat="-0.2597669606781506 0 0 0.9656713344301135">
+      <body name="Can0" pos="0.607768438662758 -0.22422201240771178 0.8600000000000001" quat="0.27770592002173766 0 0 0.9606661345050528">
         <geom condim="4" density="100" friction="0.95 0.3 0.1" group="1" material="coke" mesh="can_mesh" name="Can0" pos="0 0 0" solimp="0.998 0.998 0.001" solref="0.001 1" type="mesh" />
       <site name="Can0" pos="0 0 0" rgba="1 0 0 0" size="0.002 0.002 0.002" type="sphere" /><joint damping="0.0005" name="Can0" type="free" /></body>
       </worldbody>

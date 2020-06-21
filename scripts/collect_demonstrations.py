@@ -7,6 +7,7 @@ from multiprocessing import Pool, cpu_count
 import functools
 import os
 import pickle as pkl
+import random
 
 
 def save_rollout(env_type, save_dir, camera_obs=True, random_reach=False, N=0, renderer=False):
@@ -16,11 +17,11 @@ def save_rollout(env_type, save_dir, camera_obs=True, random_reach=False, N=0, r
     for n in N:
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
             continue
-        
+        rng = random.Random(n + 42754)
         if random_reach:
             traj = get_random_trajectory(env_type, camera_obs, renderer)
         else:
-            traj = get_expert_trajectory(env_type, camera_obs, renderer)
+            traj = get_expert_trajectory(env_type, camera_obs, renderer, rng=rng)
         pkl.dump({'traj': traj, 'env_type': env_type}, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
 
@@ -48,9 +49,5 @@ if __name__ == '__main__':
         assert not args.renderer, "can't display rendering when using multiple workers"
 
         with Pool(cpu_count()) as p:
-            n_per = int(args.N // args.num_workers)
-            jobs = [range(i * n_per, (i + 1) * n_per) for i in range(args.num_workers - 1)]
-            jobs.append(range((args.num_workers - 1) * n_per, args.N))
-            
             f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam, args.random_reach)
-            p.map(f, jobs)
+            p.map(f, range(args.N))

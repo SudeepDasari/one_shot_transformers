@@ -21,9 +21,10 @@ import numpy as np
 
 
 class PandaPickPlace(DefaultPandaPickPlace):
-    def __init__(self, randomize_goal=False, single_object_mode=0, no_clear=False, **kwargs):
+    def __init__(self, randomize_goal=False, single_object_mode=0, no_clear=False, default_bin=3, **kwargs):
         self._randomize_goal = randomize_goal
         self._no_clear = no_clear
+        self._default_bin = default_bin
         if randomize_goal:
             assert single_object_mode == 2, "only  works with single_object_mode==2!"
         super().__init__(single_object_mode=single_object_mode, **kwargs)
@@ -45,7 +46,7 @@ class PandaPickPlace(DefaultPandaPickPlace):
             if self._randomize_goal:
                 np.random.shuffle(self._bin_mappings)
             else:
-                self._bin_mappings[:] = 3
+                self._bin_mappings[:] = self._default_bin
         super()._reset_internal()
     
     def reward(self, action=None):
@@ -202,8 +203,7 @@ class PandaPickPlaceDistractor(PandaPickPlace):
     A new object is sampled on every reset.
     """
 
-    def __init__(self, force_object = '', **kwargs):
+    def __init__(self, force_object = '', randomize_goal=True, **kwargs):
         assert "single_object_mode" not in kwargs, "invalid set of arguments"
         obj = np.random.choice(['milk', 'bread', 'cereal', 'can']) if not force_object else force_object
-        super().__init__(single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=True, **kwargs)
-
+        super().__init__(single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)

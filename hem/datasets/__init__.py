@@ -3,6 +3,11 @@ from hem.datasets.savers.hdf5_trajectory import HDF5Trajectory
 import pickle as pkl
 import glob
 import os
+try:
+    from hem.datasets.savers.render_loader import ImageRenderWrapper
+    import_render_wrapper = True
+except:
+    import_render_wrapper = False
 
 
 def get_dataset(name):
@@ -60,12 +65,15 @@ def get_validation_batch(loader, batch_size=8):
 
 def load_traj(fname):
     if '.pkl' in fname:
-        return pkl.load(open(fname, 'rb'))['traj']
+        traj = pkl.load(open(fname, 'rb'))['traj']
     elif '.hdf5' in fname:
         traj = HDF5Trajectory()
         traj.load(fname)
-        return traj
-    raise NotImplementedError
+    else:
+        raise NotImplementedError
+
+    traj = traj if not import_render_wrapper else ImageRenderWrapper(traj)
+    return traj
 
 
 def get_files(root_dir):
