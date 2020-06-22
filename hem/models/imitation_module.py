@@ -121,7 +121,7 @@ class LatentImitation(nn.Module):
 
         # action processing
         self._action_lstm = nn.LSTM(config['action_lstm']['in_dim'], config['action_lstm']['out_dim'], config['action_lstm'].get('n_layers', 1))
-        self._dist_size = torch.Size(config['adim'], config['n_mixtures']))
+        self._dist_size = torch.Size((config['adim'], config['n_mixtures']))
         self._mu = nn.Linear(config['action_lstm']['out_dim'], config['adim'] * config['n_mixtures'])
         self._ln_scale = nn.Linear(config['action_lstm']['out_dim'], config['adim'] * config['n_mixtures'])
         self._logit_prob = nn.Linear(config['action_lstm']['out_dim'], config['adim'] * config['n_mixtures'])
@@ -147,7 +147,6 @@ class LatentImitation(nn.Module):
         pred_embeds = self._action_lstm(lstm_in)[0].transpose(0, 1)
 
         # distribution variables
-        import pdb; pdb.set_trace()
         mu = self._mu(pred_embeds).reshape((pred_embeds.shape[:-1] + self._dist_size))
         ln_scale = self._ln_scale(pred_embeds).reshape((pred_embeds.shape[:-1] + self._dist_size))
         logit_prob = self._logit_prob(pred_embeds).reshape((pred_embeds.shape[:-1] + self._dist_size))

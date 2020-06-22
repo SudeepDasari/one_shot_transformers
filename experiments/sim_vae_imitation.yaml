@@ -1,0 +1,40 @@
+batch_size: 20
+lr: 0.0005
+epochs: 2000
+loader_workers: 15
+kl_beta: 0.01
+
+dataset:
+  type: "agent teacher"
+  agent_dir: ${EXPERT_DATA}/sawyer/*.pkl
+  teacher_dir: ${EXPERT_DATA}/panda/*.pkl
+  T_context: 2
+  agent_context: 0
+  T_pair: 20
+  height: 180
+  width: 240
+  crop: [100, 0, 0, 0]
+  rand_crop: [12, 16]
+  color_jitter: [0.2, 0.3, 0.3]
+  sample_sides: True
+  state_spec: [ee_aa, gripper_qpos]
+
+policy:
+  adim: 8
+  n_mixtures: 3
+  latent_dim: 32
+  image_embedding:
+    type: 'simple'
+  prior:
+    state_dim: 137
+    context_dim: 128
+    T: 2
+  posterior:
+    in_dim: 145
+    rnn_dim: 64
+    bidirectional: True
+
+  action_lstm:
+    in_dim: 201
+    out_dim: 64
+
