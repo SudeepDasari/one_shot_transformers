@@ -7,6 +7,7 @@ from torch.distributions import MultivariateNormal
 import numpy as np
 from hem.models.traj_embed import _NonLocalLayer
 from hem.models.contrastive_module import SplitContrastive
+from hem.models.discrete_logistic import DiscreteMixLogistic
 
 
 class ConditionedPolicy(nn.Module):
@@ -120,7 +121,10 @@ class LatentImitation(nn.Module):
 
         # action processing
         self._action_lstm = nn.LSTM(config['action_lstm']['in_dim'], config['action_lstm']['out_dim'], config['action_lstm'].get('n_layers', 1))
-        self._mdn = MixtureDensityTop(config['action_lstm']['out_dim'], config['adim'], config['n_mixtures'])
+        self._dist_size = torch.Size(config['adim'], config['n_mixtures']))
+        self._mu = nn.Linear(config['action_lstm']['out_dim'], config['adim'] * config['n_mixtures'])
+        self._ln_scale = nn.Linear(config['action_lstm']['out_dim'], config['adim'] * config['n_mixtures'])
+        self._logit_prob = nn.Linear(config['action_lstm']['out_dim'], config['adim'] * config['n_mixtures'])
     
     def forward(self, states, images, context, actions=None, ret_dist=True):
         img_embed = self._embed(images)
@@ -140,11 +144,17 @@ class LatentImitation(nn.Module):
         lstm_in = torch.cat((sa_latent, goal_latent), 1)[None].repeat((states.shape[1], 1, 1))
         lstm_in = torch.cat((lstm_in, states.transpose(0, 1)), 2)
         self._action_lstm.flatten_parameters()
-        pred_embeds, _ = self._action_lstm(lstm_in)
-        mu, sigma_inv, alpha = self._mdn(pred_embeds.transpose(0, 1))
+        pred_embeds = self._action_lstm(lstm_in)[0].transpose(0, 1)
+
+        # distribution variables
+        import pdb; pdb.set_trace()
+        mu = self._mu(pred_embeds).reshape((pred_embeds.shape[:-1] + self._dist_size))
+        ln_scale = self._ln_scale(pred_embeds).reshape((pred_embeds.shape[:-1] + self._dist_size))
+        logit_prob = self._logit_prob(pred_embeds).reshape((pred_embeds.shape[:-1] + self._dist_size))
+        
         if ret_dist:
-            return GMMDistribution(mu, sigma_inv, alpha), (posterior, prior)
-        return (mu, sigma_inv, alpha), torch.distributions.kl.kl_divergence(posterior, prior)
+            return DiscreteMixLogistic(mu, ln_scale, logit_prob), (posterior, prior)
+        return (mu, ln_scale, logit_prob), torch.distributions.kl.kl_divergence(posterior, prior)
 
 
 class _NormalPrior(nn.Module):
