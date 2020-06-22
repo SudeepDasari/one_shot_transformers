@@ -1,7 +1,7 @@
 import torch
 from hem.models.imitation_module import LatentImitation
 from hem.models import Trainer
-from hem.models.mdn_loss import GMMDistribution
+from hem.models.discrete_logistic import DiscreteMixLogistic
 import numpy as np
 
 
@@ -16,8 +16,8 @@ if __name__ == '__main__':
         images = traj['images'][:,:-1].to(device) 
         context = context.to(device)
 
-        (mu, sigma_inv, alpha), kl = m(states, images, context, actions, ret_dist=False)
-        action_distribution = GMMDistribution(mu, sigma_inv, alpha)
+        (mu, ln_scale, logit_prob), kl = m(states, images, context, actions, ret_dist=False)
+        action_distribution = DiscreteMixLogistic(mu, ln_scale, logit_prob)
         kl = torch.mean(kl)
         neg_ll = torch.mean(-action_distribution.log_prob(actions))
         loss = neg_ll + config['kl_beta'] * kl
