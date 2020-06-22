@@ -13,7 +13,7 @@ def normalize_action(action):
 
 
 def denormalize_action(norm_action, base_pos, base_quat):
-    action = norm_action.copy()
+    action = np.clip(norm_action.copy(), -1, 1)
     for d in range(ranges.shape[0]):
         action[d] = 0.5 * (action[d] + 1) * (ranges[d,1] - ranges[d,0]) + ranges[d,0]
     action[3] = action[3] - 2 if action[3] > 1 else action[3]

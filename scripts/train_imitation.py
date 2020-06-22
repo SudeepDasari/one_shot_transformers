@@ -37,7 +37,7 @@ if __name__ == '__main__':
             summary_vids, cond_frames, n_success = [], [], 0
             img_dims = (config['dataset'].get('width', 224), config['dataset'].get('height', 224))
             crop_params, norm = config['dataset'].get('crop', (0, 0, 0, 0)), config['dataset'].get('normalize', True)
-            T_context, repeat = config['policy']['T_context'], config.get('repeat', 10)
+            T_context = config['policy']['T_context']
             horizon = config['dataset']['T_pair']
 
             for _ in range(config['n_sim_rollouts']):
@@ -49,8 +49,7 @@ if __name__ == '__main__':
                 context_images = np.concatenate([im.transpose((2, 0, 1))[None] for im in context_images], 0)[None].astype(np.float32)
                 context_images = torch.from_numpy(context_images).to(device)
 
-                env = get_env(config['agent_sim'])(has_renderer=False, use_camera_obs=True, camera_height=320, camera_width=320)
-                env = IKWrapper(env, action_repeat=repeat)
+                env = get_env(config['agent_sim'], has_renderer=False, use_camera_obs=True, camera_height=320, camera_width=320)
                 obs = env.reset()
                 summary_vid, states, imgs, success = [obs['image'].astype(np.float32).transpose(2, 0, 1)[None] / 255], [], [], False
                 obs = post_proc_obs(obs)
@@ -65,8 +64,6 @@ if __name__ == '__main__':
                                 'images': torch.from_numpy(np.concatenate(imgs, 0)).to(device)[None]}
                     action_dist = m(model_in, context_images)
                     action = action_dist.mean[0,-1].cpu().numpy()
-                    action[3:7] /= np.linalg.norm(action[3:7])
-                    action[-1] = 1 if action[-1] > 0 else -1
                         
                     obs, reward, done, _ = env.step(action)
                     success = True if reward else success
