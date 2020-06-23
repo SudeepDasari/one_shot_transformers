@@ -64,27 +64,29 @@ class GoalStateRegression(ConditionedPolicy):
 
 
 class _SimplePrior(nn.Module):
-    def __init__(self, in_dim, latent_dim):
+    def __init__(self, in_dim, latent_dim, min_std=0.001):
         super().__init__()
         self._prior_nn = nn.Sequential(nn.Linear(in_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True))
         self._ln_var = nn.Linear(latent_dim, latent_dim)
         self._mean = nn.Linear(latent_dim, latent_dim)
+        self._min_std = min_std
     
     def forward(self, states, context):
         nn_in = torch.cat((states, context), 1)
         p_latent = self._prior_nn(nn_in)
         mean = self._mean(p_latent)
-        covar = torch.diag_embed(torch.exp(self._ln_var(p_latent)))
+        covar = torch.diag_embed(F.softplus(self._ln_var(p_latent)) + self._min_std)
         return MultivariateNormal(mean, covar)
 
 
 class _Posterior(nn.Module):
-    def __init__(self, latent_dim, in_dim, n_layers=1, rnn_dim=128, bidirectional=False):
+    def __init__(self, latent_dim, in_dim, n_layers=1, rnn_dim=128, bidirectional=False, min_std=0.001):
         super().__init__()
         self._rnn = nn.LSTM(in_dim, rnn_dim, n_layers, bidirectional=bidirectional)
         mult = 2 if bidirectional else 1
         self._out = nn.Linear(mult * 2 * rnn_dim, latent_dim * 2)
         self._l_dim = latent_dim
+        self._min_std = min_std
 
     def forward(self, states, actions, lens=None):
         sa = torch.cat((states, actions), 2).transpose(0, 1)
@@ -98,7 +100,7 @@ class _Posterior(nn.Module):
             front, back = rnn_out[0], rnn_out[1]
         mean_ln_var = self._out(torch.cat((front, back), 1))
         mean, ln_var = mean_ln_var[:,:self._l_dim], mean_ln_var[:,self._l_dim:]
-        covar = torch.diag_embed(torch.exp(ln_var))
+        covar = torch.diag_embed(F.softplus(ln_var) + self._min_std)
         return MultivariateNormal(mean, covar)
 
 
