@@ -176,7 +176,7 @@ class _BottleneckConv(nn.Module):
 
 
 class SimpleSpatialSoftmax(nn.Module):
-    def __init__(self, added_convs=3, n_out=128):
+    def __init__(self, added_convs=3, n_out=64):
         super().__init__()
         vgg_feats =list( models.vgg16(pretrained=True).features[:16].children())
         added_feats = [_BottleneckConv(256, 256, 64) for _ in range(added_convs)]

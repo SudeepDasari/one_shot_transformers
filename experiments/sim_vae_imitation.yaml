@@ -1,5 +1,5 @@
 batch_size: 20
-lr: 0.0005
+lr: 0.0001
 epochs: 2000
 loader_workers: 15
 kl_beta: 0.01
@@ -22,19 +22,23 @@ dataset:
 policy:
   adim: 8
   n_mixtures: 3
-  latent_dim: 32
+  latent_dim: 16
+  goal_dim: 16
+
+  goal_im_enc:
+    in_dim: 64
+
   image_embedding:
     type: 'simple'
+
   prior:
-    state_dim: 137
-    context_dim: 128
-    T: 2
+    in_dim: 89
+
   posterior:
-    in_dim: 145
+    in_dim: 81
     rnn_dim: 64
     bidirectional: True
 
   action_lstm:
-    in_dim: 201
+    in_dim: 105
     out_dim: 64
-

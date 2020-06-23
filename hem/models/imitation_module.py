@@ -63,23 +63,18 @@ class GoalStateRegression(ConditionedPolicy):
         return self._top(embeds)
 
 
-class _Prior(nn.Module):
-    def __init__(self, latent_dim, state_dim, context_dim, T):
+class _SimplePrior(nn.Module):
+    def __init__(self, in_dim, latent_dim):
         super().__init__()
-        self._T = T
-        self._context_proc = nn.Sequential(nn.Linear(T * context_dim, T * context_dim), nn.BatchNorm1d(context_dim * T), nn.ReLU(inplace=True), 
-                                            nn.Linear(T * context_dim, T * context_dim), nn.BatchNorm1d(context_dim * T), nn.ReLU(inplace=True), 
-                                            nn.Linear(T * context_dim, context_dim))
-        self._final_proc = nn.Sequential(nn.Linear(context_dim + state_dim, context_dim + state_dim), nn.BatchNorm1d(context_dim + state_dim), nn.ReLU(inplace=True),
-                                            nn.Linear(context_dim + state_dim, latent_dim * 2))
-        self._l_dim = latent_dim
-
-    def forward(self, s_0, context):
-        assert context.shape[1] == self._T, "context times don't match!"
-        context_embed = self._context_proc(context.view((context.shape[0], -1)))
-        mean_ln_var = self._final_proc(torch.cat((context_embed, s_0), 1))
-        mean, ln_var = mean_ln_var[:,:self._l_dim], mean_ln_var[:,self._l_dim:]
-        covar = torch.diag_embed(torch.exp(ln_var))
+        self._prior_nn = nn.Sequential(nn.Linear(in_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True))
+        self._ln_var = nn.Linear(latent_dim, latent_dim)
+        self._mean = nn.Linear(latent_dim, latent_dim)
+    
+    def forward(self, states, context):
+        nn_in = torch.cat((states, context), 1)
+        p_latent = self._prior_nn(nn_in)
+        mean = self._mean(p_latent)
+        covar = torch.diag_embed(torch.exp(self._ln_var(p_latent)))
         return MultivariateNormal(mean, covar)
 
 
@@ -114,9 +109,14 @@ class LatentImitation(nn.Module):
         embed = get_model(config['image_embedding'].pop('type'))
         self._embed = embed(**config['image_embedding'])
 
+        # goal embedding networks
+        goal_dim, in_dim = config['goal_dim'], config['goal_im_enc']['in_dim']
+        self._goal_im_embed = nn.Sequential(nn.Linear(in_dim, in_dim), nn.ReLU(inplace=True), nn.Linear(in_dim, goal_dim))
+        # code up context embedding later
+
         self._concat_state = config.get('concat_state', True)
         latent_dim = config['latent_dim']
-        self._prior = _Prior(latent_dim=latent_dim, **config['prior'])
+        self._prior = _SimplePrior(latent_dim=latent_dim, **config['prior'])
         self._posterior = _Posterior(latent_dim=latent_dim, **config['posterior'])
 
         # action processing
@@ -128,20 +128,14 @@ class LatentImitation(nn.Module):
     
     def forward(self, states, images, context, actions=None, ret_dist=True):
         img_embed = self._embed(images)
-        context_embed = self._embed(context)
+        goal_embed = self._goal_encodings(img_embed[:,-1], context)
         states = torch.cat((img_embed, states), 2) if self._concat_state else img_embed
 
-        prior = self._prior(states[:,0], context_embed)
-        goal_latent = prior.rsample()
+        prior = self._prior(states[:,0], goal_embed)
         posterior = self._posterior(states, actions) if actions is not None else prior
-
-        if self.training:
-            assert actions is not None
-            sa_latent = posterior.rsample()
-        else:
-            sa_latent = prior.rsample()
+        sa_latent = posterior.rsample() if self.training else prior.rsample()
         
-        lstm_in = torch.cat((sa_latent, goal_latent), 1)[None].repeat((states.shape[1], 1, 1))
+        lstm_in = torch.cat((sa_latent, goal_embed), 1)[None].repeat((states.shape[1], 1, 1))
         lstm_in = torch.cat((lstm_in, states.transpose(0, 1)), 2)
         self._action_lstm.flatten_parameters()
         pred_embeds = self._action_lstm(lstm_in)[0].transpose(0, 1)
@@ -154,6 +148,10 @@ class LatentImitation(nn.Module):
         if ret_dist:
             return DiscreteMixLogistic(mu, ln_scale, logit_prob), (posterior, prior)
         return (mu, ln_scale, logit_prob), torch.distributions.kl.kl_divergence(posterior, prior)
+    
+    def _goal_encodings(self, goal_image, context):
+        # context_embed = self._embed(context)
+        return self._goal_im_embed(goal_image)
 
 
 class _NormalPrior(nn.Module):
@@ -166,20 +164,6 @@ class _NormalPrior(nn.Module):
         covar = torch.diag_embed(torch.ones((states.shape[0], self._l_dim))).to(states.device)
         return MultivariateNormal(mean, covar), None
 
-
-class _SimplePrior(nn.Module):
-    def __init__(self, in_dim, latent_dim):
-        super().__init__()
-        self._prior_nn = nn.Sequential(nn.Linear(in_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, latent_dim), nn.ReLU(inplace=True))
-        self._ln_var = nn.Linear(latent_dim, latent_dim)
-        self._mean = nn.Linear(latent_dim, latent_dim)
-    
-    def forward(self, states, context):
-        nn_in = torch.cat((states, context), 1)
-        p_latent = self._prior_nn(nn_in)
-        mean = self._mean(p_latent)
-        covar = torch.diag_embed(torch.exp(self._ln_var(p_latent)))
-        return MultivariateNormal(mean, covar), None
  
 
 class _VidPrior(nn.Module):
