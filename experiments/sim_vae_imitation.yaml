@@ -1,7 +1,7 @@
 batch_size: 20
 lr: 0.0001
 epochs: 2000
-loader_workers: 15
+loader_workers: 0
 kl_beta: 0.01
 
 dataset:
@@ -10,9 +10,9 @@ dataset:
   teacher_dir: ${EXPERT_DATA}/panda/*.pkl
   T_context: 2
   agent_context: 0
-  T_pair: 20
-  height: 180
-  width: 240
+  T_pair: 30
+  height: 135
+  width: 180
   crop: [100, 0, 0, 0]
   rand_crop: [12, 16]
   color_jitter: [0.2, 0.3, 0.3]
@@ -25,11 +25,13 @@ policy:
   latent_dim: 16
   goal_dim: 16
 
-  goal_im_enc:
+  goal_enc:
     in_dim: 64
+    T_context: 2
 
   image_embedding:
     type: 'simple'
+    added_convs: 0
 
   prior:
     in_dim: 89

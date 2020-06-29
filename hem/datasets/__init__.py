@@ -4,6 +4,7 @@ import pickle as pkl
 import glob
 import os
 try:
+    raise NotImplementedError
     from hem.datasets.savers.render_loader import ImageRenderWrapper
     import_render_wrapper = True
 except:

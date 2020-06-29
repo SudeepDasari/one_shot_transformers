@@ -112,9 +112,9 @@ class LatentImitation(nn.Module):
         self._embed = embed(**config['image_embedding'])
 
         # goal embedding networks
-        goal_dim, in_dim = config['goal_dim'], config['goal_im_enc']['in_dim']
-        self._goal_im_embed = nn.Sequential(nn.Linear(in_dim, in_dim), nn.ReLU(inplace=True), nn.Linear(in_dim, goal_dim))
-        # code up context embedding later
+        goal_dim, in_dim, T = config['goal_dim'], config['goal_enc']['in_dim'], config['goal_enc']['T_context']
+        self._last_im_2_goal = nn.Sequential(nn.Linear(in_dim, in_dim), nn.ReLU(inplace=True), nn.Linear(in_dim, goal_dim))
+        self._context_2_goal = nn.Sequential(nn.Linear(T * in_dim, T * in_dim), nn.ReLU(inplace=True), nn.Linear(T * in_dim, goal_dim))
 
         self._concat_state = config.get('concat_state', True)
         latent_dim = config['latent_dim']
@@ -152,10 +152,14 @@ class LatentImitation(nn.Module):
         return (mu, ln_scale, logit_prob), torch.distributions.kl.kl_divergence(posterior, prior)
     
     def _goal_encodings(self, goal_image, context):
-        # context_embed = self._embed(context)
-        if 'goal_image' in context:
-            return self._goal_im_embed(self._embed(context['goal_image']))
-        return self._goal_im_embed(goal_image)
+        context_embed = self._embed(context).reshape((context.shape[0], -1))
+        goal_embed = self._context_2_goal(context_embed)
+        if self.training:
+            goal_im_embed = self._last_im_2_goal(goal_image)
+            comb_goals = torch.cat((goal_embed[:,None], goal_im_embed[:,None]), 1)
+            context_select = torch.randint(2, (goal_image.shape[0],))
+            goal_embed = comb_goals[torch.arange(goal_image.shape[0]),context_select]
+        return goal_embed
 
 
 class _NormalPrior(nn.Module):
