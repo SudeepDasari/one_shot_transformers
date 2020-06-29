@@ -153,6 +153,8 @@ class LatentImitation(nn.Module):
     
     def _goal_encodings(self, goal_image, context):
         # context_embed = self._embed(context)
+        if 'goal_image' in context:
+            return self._goal_im_embed(self._embed(context['goal_image']))
         return self._goal_im_embed(goal_image)
 
 

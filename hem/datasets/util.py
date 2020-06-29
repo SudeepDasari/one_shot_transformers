@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import random
+from hem.datasets import Trajectory
 
 
 SHUFFLE_RNG = 2843014334
@@ -111,4 +112,6 @@ def select_random_frames(frames, n_select, sample_sides=False):
 
     if isinstance(frames, (list, tuple)):
         return [frames[i] for i in selected_frames]
+    elif isinstance(frames, Trajectory):
+        return [frames[i]['obs']['image'] for i in selected_frames]
     return frames[selected_frames]

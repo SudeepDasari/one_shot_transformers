@@ -24,8 +24,30 @@ def denormalize_action(norm_action, base_pos, base_quat):
     return np.concatenate((action[:3] - base_pos, quat, action[7:]))
 
 
+def post_proc_obs(obs):
+    if 'image' in obs:
+        obs['image'] = obs['image'][80:]
+    if 'depth' in obs:
+        obs['depth'] = obs['depth'][80:]
+
+    quat = Quaternion(obs['eef_quat'][[3, 0, 1, 2]])
+    aa = np.concatenate(([quat.angle / np.pi], quat.axis)).astype(np.float32)
+    if aa[0] < 0:
+        aa[0] += 2
+    obs['ee_aa'] = np.concatenate((obs['eef_pos'], aa)).astype(np.float32)
+    return obs
+
+
 class CustomIKWrapper(IKWrapper):
     def step(self, action):
         base_pos = self.env.sim.data.site_xpos[self.eef_site_id]
         base_quat = self.env._right_hand_quat
-        return super().step(denormalize_action(action, base_pos, base_quat))
+        obs, reward, done, info = super().step(denormalize_action(action, base_pos, base_quat))
+        return post_proc_obs(obs), reward, done, info
+
+    def reset(self):
+        obs = super().reset()
+        return post_proc_obs(obs)
+
+    def _get_observation(self):
+        return post_proc_obs(self.env._get_observation())

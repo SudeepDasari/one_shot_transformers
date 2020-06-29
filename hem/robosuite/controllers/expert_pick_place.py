@@ -105,21 +105,7 @@ class PickPlaceController:
         p.disconnect()
 
 
-def post_proc_obs(obs):
-    if 'image' in obs:
-        obs['image'] = obs['image'][80:]
-    if 'depth' in obs:
-        obs['depth'] = obs['depth'][80:]
-
-    quat = Quaternion(obs['eef_quat'][[3, 0, 1, 2]])
-    aa = np.concatenate(([quat.angle / np.pi], quat.axis)).astype(np.float32)
-    if aa[0] < 0:
-        aa[0] += 2
-    obs['ee_aa'] = np.concatenate((obs['eef_pos'], aa)).astype(np.float32)
-    return obs
-
-
-def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None):
+def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None, ret_env=False):
     success, use_object = False, ''
     if rng is not None:
         use_object = rng.choice(['milk', 'bread', 'cereal', 'can'])
@@ -142,7 +128,7 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None):
         env.sim.forward()
         use_object = env.item_names_org[env.object_id].lower()
 
-        traj.append(post_proc_obs(obs), raw_state=mj_state)
+        traj.append(obs, raw_state=mj_state)
         for _ in range(int(env.horizon // 10)):
             action = controller.act(obs)
             obs, reward, done, info = env.step(action)
@@ -150,14 +136,16 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None):
                 env.render()
 
             mj_state = env.sim.get_state().flatten()
-            traj.append(post_proc_obs(obs), reward, done, info, action, mj_state)
+            traj.append(obs, reward, done, info, action, mj_state)
             
             if reward:
                 success = True
                 break
-    
     if renderer:
         env.close()
     
     controller.disconnect()
+    if ret_env:
+        copy_env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
+        return traj, copy_env
     return traj

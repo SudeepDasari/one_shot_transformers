@@ -188,13 +188,16 @@ class SimpleSpatialSoftmax(nn.Module):
         if reshaped:
             B, T, C, H, W = x.shape
             x = x.view((B * T, C, H, W))
+        else:
+            B, C, H, W = x.shape
+            T = 1
+        
         x = self._conv_stack(x)
         x = F.softmax(x.view((B*T, x.shape[1], -1)), dim=2).view((B*T, x.shape[1], x.shape[2], x.shape[3]))
         h = torch.sum(torch.linspace(-1, 1, x.shape[2]).view((1, 1, -1)).to(x.device) * torch.sum(x, 3), 2)
         w = torch.sum(torch.linspace(-1, 1, x.shape[3]).view((1, 1, -1)).to(x.device) * torch.sum(x, 2), 2)
         x = torch.cat((h, w), 1)
-        if reshaped:
-            x = x.view((B, T, 512))
+        x = x.reshape((B, T, 512)) if reshaped else x
         return self._out(x)
 
 

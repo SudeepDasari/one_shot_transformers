@@ -71,3 +71,7 @@ class ImageRenderWrapper:
     def __iter__(self):
         for d in range(len(self._traj)):
             yield self.get(d)
+
+    @property
+    def config_str(self):
+        return self._traj.config_str

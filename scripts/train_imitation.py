@@ -6,7 +6,7 @@ import numpy as np
 from hem.datasets.util import STD, MEAN, select_random_frames, resize, crop
 try:
     from hem.robosuite import get_env
-    from hem.robosuite.controllers.expert_pick_place import get_expert_trajectory, post_proc_obs
+    from hem.robosuite.controllers.expert_pick_place import get_expert_trajectory
     from robosuite.wrappers.ik_wrapper import IKWrapper
     mujoco_import = True
 except:
@@ -52,7 +52,6 @@ if __name__ == '__main__':
                 env = get_env(config['agent_sim'], has_renderer=False, use_camera_obs=True, camera_height=320, camera_width=320)
                 obs = env.reset()
                 summary_vid, states, imgs, success = [obs['image'].astype(np.float32).transpose(2, 0, 1)[None] / 255], [], [], False
-                obs = post_proc_obs(obs)
 
                 for _ in range(env.horizon):
                     states = states[1:] if len(states) >= horizon else states
@@ -68,7 +67,6 @@ if __name__ == '__main__':
                     obs, reward, done, _ = env.step(action)
                     success = True if reward else success
                     summary_vid.append(obs['image'].astype(np.float32).transpose(2, 0, 1)[None] / 255)
-                    obs = post_proc_obs(obs)
                     if done or success:
                         break
                     
