@@ -36,22 +36,25 @@ class SplitContrastive(nn.Module):
 
 
 class GoalContrastive(nn.Module):
-    def __init__(self, latent_dim, T=3, dropout=0.1, n_non_local=2):
+    def __init__(self, latent_dim, T=3, dropout=0.2, n_non_local=2):
         super().__init__()
         self._T = T
-        self._features = get_model('resnet')(output_raw=True, use_resnet18=True, drop_dim=2)
-        self._goal_inference_net = nn.Sequential(*[_NonLocalLayer(512, 512, 64, dropout) for _ in range(n_non_local)])
-        self._temporal_pool = nn.Conv3d(512, 512, T, padding=(0, T-2, T-2))
-        self._top = nn.Sequential(nn.Linear(512, 256), nn.ReLU(inplace=True), nn.Linear(256, latent_dim))
+        self._features = get_model('resnet')(out_dim=256, use_resnet18=True, drop_dim=2)
+        self._goal_inference_net = nn.Sequential(nn.Linear(512, 512), nn.Dropout(dropout), nn.ReLU(), nn.Linear(512, latent_dim))
+        self._temporal_goal_inference = nn.Sequential(nn.Linear(512 * T, 512), nn.Dropout(dropout), nn.ReLU(), nn.Linear(512, latent_dim))
     
     def forward(self, x):
         x_embed = self._features(x)
         has_T = len(x_embed.shape) > 4
-        x_embed = x_embed.unsqueeze(2) if not has_T else x_embed.transpose(1, 2)
-        x_embed = self._goal_inference_net(x_embed)
+        x_embed = x_embed.unsqueeze(1) if not has_T else x_embed
+        x_embed = F.softmax(x_embed.reshape((x_embed.shape[0], x_embed.shape[1], x_embed.shape[2], -1)), dim=3).reshape(x_embed.shape)
+        h = torch.sum(torch.linspace(-1, 1, x_embed.shape[3]).view((1, 1, 1, -1)).to(x.device) * torch.sum(x_embed, 4), 3)
+        w = torch.sum(torch.linspace(-1, 1, x_embed.shape[4]).view((1, 1, 1, -1)).to(x.device) * torch.sum(x_embed, 3), 3)
+        x_embed = torch.cat((h, w), 2)
         if has_T:
-            assert x_embed.shape[2] == self._T, "x doesn't match time series!"
-            x_embed = self._temporal_pool(x_embed)
-        x_embed = self._top(torch.mean(x_embed[:,:,0], (2, 3)))
+            assert x_embed.shape[1] == self._T, "x doesn't match time series!"
+            x_embed = self._temporal_goal_inference(x_embed.reshape((x_embed.shape[0], -1)))
+        else:
+            x_embed = self._goal_inference_net(x_embed[:,0])
         x_embed = F.normalize(x_embed, dim=1)
         return x_embed
