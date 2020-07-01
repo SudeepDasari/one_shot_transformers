@@ -176,13 +176,13 @@ class _BottleneckConv(nn.Module):
 
 
 class SimpleSpatialSoftmax(nn.Module):
-    def __init__(self, added_convs=3, n_out=64):
+    def __init__(self, added_convs=3, out_dim=64):
         super().__init__()
         n_keep = 16 if added_convs else 15
         vgg_feats =list( models.vgg16(pretrained=True).features[:n_keep].children())
         added_feats = [_BottleneckConv(256, 256, 64) for _ in range(added_convs)]
         self._conv_stack = nn.Sequential(*(vgg_feats + added_feats))
-        self._out = nn.Sequential(nn.Linear(512, 512), nn.ReLU(inplace=True), nn.Linear(512, n_out))
+        self._out = nn.Sequential(nn.Linear(512, 512), nn.ReLU(inplace=True), nn.Linear(512, out_dim))
 
     def forward(self, x):
         reshaped = len(x.shape) == 5

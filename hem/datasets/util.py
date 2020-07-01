@@ -52,7 +52,7 @@ def crop(img, crop):
 
 
 def randomize_video(frames, color_jitter=None, rand_gray=None, rand_crop=None, rand_rot=0, rand_trans=np.array([0,0]), normalize=False):
-    frames = [fr for fr in frames]
+    frames = [fr.astype(np.float32) for fr in frames]
     
     if color_jitter is not None:
         rand_h, rand_s, rand_v = [np.random.uniform(-h, h) for h in color_jitter]

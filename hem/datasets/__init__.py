@@ -57,6 +57,9 @@ def get_dataset(name):
     elif name == 'aux contrastive':
         from .frame_datasets import AuxContrastiveDataset
         return AuxContrastiveDataset
+    elif name == 'contrastive goals':
+        from .goal_datasets import ContrastiveGoals
+        return ContrastiveGoals
     raise NotImplementedError
 
 

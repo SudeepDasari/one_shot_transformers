@@ -32,3 +32,20 @@ class SplitContrastive(nn.Module):
         scene_feat = F.normalize(scene_feat, dim=1)
 
         return {'scene_feat':scene_feat, 'arm_feat': arm_feat, 'aux_pred': aux_pred, 'pred_domain': pred_domain}
+
+
+class GoalContrastive(nn.Module):
+    def __init__(self, latent_dim, embed_config, T=3):
+        super().__init__()
+        embed_type = embed_config.pop('type')
+        self._T = T
+        self._embed = get_model(embed_type)(out_dim=latent_dim, **embed_config)
+        self._goal_inference_net = nn.Sequential(nn.Linear(latent_dim * T, latent_dim * T), nn.ReLU(inplace=True), nn.Linear(latent_dim * T, latent_dim))
+    
+    def forward(self, x):
+        x_embed = self._embed(x)
+        if len(x_embed.shape) > 2:
+            assert x_embed.shape[1] == self._T, "x doesn't match time series!"
+            x_embed = self._goal_inference_net(x_embed.reshape((x_embed.shape[0], -1)))
+        x_embed = F.normalize(x_embed, dim=1)
+        return x_embed
