@@ -1,4 +1,4 @@
-batch_size: 12
+batch_size: 40
 lr: 0.001
 loader_workers: 4
 img_log_freq: 1000
@@ -14,5 +14,3 @@ dataset:
 
 model:
   latent_dim: 64
-  embed_config:
-    type: simple
