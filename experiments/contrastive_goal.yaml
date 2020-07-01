@@ -1,10 +1,11 @@
 batch_size: 40
-lr: 0.001
+lr: 0.0001
 loader_workers: 8
 img_log_freq: 1000
 save_freq: 20000
 epochs: 3000
 temperature: 0.07
+vlm_alpha: 1
 
 dataset:
   type: contrastive goals
