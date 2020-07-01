@@ -1,6 +1,6 @@
 batch_size: 40
 lr: 0.001
-loader_workers: 4
+loader_workers: 8
 img_log_freq: 1000
 save_freq: 20000
 epochs: 3000
@@ -13,4 +13,5 @@ dataset:
   color_jitter: [0.1, 0.2, 0.2]
 
 model:
+  n_non_local: 1
   latent_dim: 64
