@@ -21,7 +21,7 @@ if __name__ == '__main__':
         order = list(range(PN.shape[0] * PN.shape[1])); np.random.shuffle(order)
 
         Q_embed = m(Q)
-        PN_embed = m(PN.reshape((PN.shape[0] * PN.shape[1], PN.shape[2], PN.shape[3], PN.shape[4], PN.shape[5]))[order])
+        PN_embed = m(PN.reshape((PN.shape[0] * PN.shape[1], PN.shape[2], PN.shape[3], PN.shape[4]))[order])
         PN_embed = PN_embed[np.argsort(order)].reshape((PN.shape[0], PN.shape[1], PN_embed.shape[-1]))
 
         logits = torch.matmul(Q_embed[:,None], PN_embed.transpose(1, 2))[:,0] / temperature        

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hem.models import get_model
 from hem.models.traj_embed import _NonLocalLayer
+from torchvision import models
 
 
 class SplitContrastive(nn.Module):
@@ -36,15 +37,16 @@ class SplitContrastive(nn.Module):
 
 
 class GoalContrastive(nn.Module):
-    def __init__(self, latent_dim, T=3, dropout=0.2):
+    def __init__(self, latent_dim, T=3):
         super().__init__()
         self._T = T
-        self._features = get_model('resnet')(out_dim=256, use_resnet18=True, drop_dim=2)
-        self._goal_inference_net = nn.Sequential(nn.Linear(512, 512), nn.Dropout(dropout), nn.ReLU(), nn.Linear(512, latent_dim))
-        self._temporal_goal_inference = nn.Sequential(nn.Linear(512 * T, 512), nn.Dropout(dropout), nn.ReLU(), nn.Linear(512, latent_dim))
+        self._vgg = models.vgg16(pretrained=True).features[:10]
+        self._top_convs = nn.Sequential(nn.Conv2d(128, 128, 3, stride=2, padding=1), nn.ReLU(inplace=True), nn.Conv2d(128, 128, 3, stride=2, padding=1))
+        self._goal_inference_net = nn.Sequential(nn.Linear(256, 256), nn.ReLU(inplace=True), nn.Linear(256, latent_dim))
+        self._temporal_goal_inference = nn.Sequential(nn.Linear(256 * T, 256), nn.ReLU(inplace=True), nn.Linear(256, latent_dim))
     
     def forward(self, x):
-        x_embed = self._features(x)
+        x_embed = self._conv_stack(x)
         has_T = len(x_embed.shape) > 4
         x_embed = x_embed.unsqueeze(1) if not has_T else x_embed
         x_embed = F.softmax(x_embed.reshape((x_embed.shape[0], x_embed.shape[1], x_embed.shape[2], -1)), dim=3).reshape(x_embed.shape)
@@ -58,3 +60,11 @@ class GoalContrastive(nn.Module):
             x_embed = self._goal_inference_net(x_embed[:,0])
         x_embed = F.normalize(x_embed, dim=1)
         return x_embed
+
+    def _conv_stack(self, imgs):
+        reshaped = len(imgs.shape) > 4
+        x = imgs.reshape((imgs.shape[0] * imgs.shape[1], imgs.shape[2], imgs.shape[3], imgs.shape[4])) if reshaped else imgs
+        x = self._vgg(x)
+        x = self._top_convs(x)
+        out = x.reshape((imgs.shape[0], imgs.shape[1], x.shape[1], x.shape[2], x.shape[3])) if reshaped else x
+        return out
