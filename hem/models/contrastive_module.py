@@ -36,7 +36,7 @@ class SplitContrastive(nn.Module):
 
 
 class GoalContrastive(nn.Module):
-    def __init__(self, latent_dim, T=3, dropout=0.2, n_non_local=2):
+    def __init__(self, latent_dim, T=3, dropout=0.2):
         super().__init__()
         self._T = T
         self._features = get_model('resnet')(out_dim=256, use_resnet18=True, drop_dim=2)

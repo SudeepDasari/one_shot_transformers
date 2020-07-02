@@ -50,6 +50,8 @@ class ContrastiveGoals(Dataset):
         other_positive = (obj_set_id * self._TASK_PER_SET + task_id) * self._DEMOS_PER_TASK + other_positive
 
         frames = self._cache[index] + self._cache[other_positive][-1:] + [self._cache[n][-1] for n in negative_indices]
-        frames = randomize_video(frames, rand_crop=self._rand_crop, color_jitter=self._color_jitter, normalize=True)
-        query, positive, negatives = frames[:self._T], frames[self._T], frames[self._T+1:]
-        return query.transpose((0, 3, 1, 2)).astype(np.float32), positive.transpose((2, 0, 1)).astype(np.float32), negatives.transpose((0, 3, 1, 2)).astype(np.float32)
+        query = randomize_video(self._cache[index], rand_crop=self._rand_crop, color_jitter=self._color_jitter, normalize=True)
+        positive = randomize_video(self._cache[other_positive], rand_crop=self._rand_crop, color_jitter=self._color_jitter, normalize=True)
+        negatives = [randomize_video(self._cache[n], rand_crop=self._rand_crop, color_jitter=self._color_jitter, normalize=True) for n in negative_indices]
+        negatives = np.concatenate([n[None] for n in negatives], 0)
+        return query.transpose((0, 3, 1, 2)).astype(np.float32), positive.transpose((0, 3, 1, 2)).astype(np.float32), negatives.transpose((0, 1, 4, 2, 3)).astype(np.float32)

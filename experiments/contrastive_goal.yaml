@@ -1,4 +1,4 @@
-batch_size: 40
+batch_size: 10
 lr: 0.001
 loader_workers: 8
 img_log_freq: 1000
@@ -11,6 +11,8 @@ dataset:
   root_dir: ${REPO_BUF}
   rand_crop: [6, 8]
   color_jitter: [0.1, 0.2, 0.2]
+  height: 144
+  width: 192
 
 model:
   latent_dim: 64
