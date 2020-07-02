@@ -158,9 +158,9 @@ class VGGFeats(nn.Module):
 
 
 class _BottleneckConv(nn.Module):
-    def __init__(self, in_dim, out_dim, feed_forward):
+    def __init__(self, in_dim, out_dim, feed_forward, in_k=1, in_stride=1, in_pad=0):
         super().__init__()
-        self._c1 = nn.Conv2d(in_dim, feed_forward, 1, stride=1, padding=0)
+        self._c1 = nn.Conv2d(in_dim, feed_forward, in_k, stride=in_stride, padding=in_pad)
         self._a1 = nn.ReLU(inplace=True)
         self._c2 = nn.Conv2d(feed_forward, feed_forward, 3, stride=1, padding=1)
         self._a2 = nn.ReLU(inplace=True)
