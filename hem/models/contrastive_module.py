@@ -40,10 +40,12 @@ class GoalContrastive(nn.Module):
     def __init__(self, latent_dim, T=3):
         super().__init__()
         self._T = T
-        self._vgg = models.vgg16(pretrained=True).features[:10]
-        self._top_convs = nn.Sequential(nn.Conv2d(128, 128, 3, stride=2, padding=1), nn.ReLU(inplace=True), nn.Conv2d(128, 128, 3, stride=2, padding=1))
-        self._goal_inference_net = nn.Sequential(nn.Linear(256, 256), nn.ReLU(inplace=True), nn.Linear(256, latent_dim))
-        self._temporal_goal_inference = nn.Sequential(nn.Linear(256 * T, 256), nn.ReLU(inplace=True), nn.Linear(256, latent_dim))
+        self._vgg = models.vgg16(pretrained=True).features[:5]
+        self._top_convs = nn.Sequential(nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.ReLU(inplace=True), 
+                            nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.ReLU(inplace=True), 
+                            nn.Conv2d(64, 64, 3, stride=2, padding=1))
+        self._goal_inference_net = nn.Sequential(nn.Linear(128, 128), nn.ReLU(inplace=True), nn.Linear(128, latent_dim))
+        self._temporal_goal_inference = nn.Sequential(nn.Linear(128 * T, 128), nn.ReLU(inplace=True), nn.Linear(128, latent_dim))
     
     def forward(self, x):
         x_embed = self._conv_stack(x)
