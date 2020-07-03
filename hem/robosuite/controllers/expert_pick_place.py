@@ -59,7 +59,7 @@ class PickPlaceController:
         self._base_quat = Quaternion(matrix=self._base_rot)
         self._hover_delta = 0.2
         if 'Milk' in self._object_name:
-            self._clearance = -0.03
+            self._clearance = -0.01
     
     def _get_target_pose(self, delta_pos, base_pos, quat, max_step=None):
         if max_step is None:
@@ -105,11 +105,12 @@ class PickPlaceController:
         p.disconnect()
 
 
-def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None, ret_env=False):
+def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False):
     success, use_object = False, ''
-    if rng is not None:
-        use_object = rng.choice(['milk', 'bread', 'cereal', 'can'])
-        rg, db, = False, rng.randint(0,3)
+    if task is not None:
+        assert 0 <= task <= 15, "task should be in [0, 15]"
+        use_object = ['milk', 'bread', 'cereal', 'can'][int(task // 4)]
+        rg, db, = False, task % 4
     else:
         rg, db = True, None
 
@@ -145,6 +146,9 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None, r
         env.close()
     
     controller.disconnect()
+    del controller
+    del env
+
     if ret_env:
         copy_env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
         return traj, copy_env
