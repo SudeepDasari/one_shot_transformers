@@ -105,17 +105,16 @@ class PickPlaceController:
         p.disconnect()
 
 
-def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None, ret_env=False):
+def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False):
     success, use_object = False, ''
-    if rng is not None:
-        use_object = rng.choice(['milk', 'bread', 'cereal', 'can'])
-        rg, db, = False, rng.randint(0,3)
+    if task is not None:
+        assert 0 <= task <= 15, "task should be in [0, 15]"
+        use_object = ['milk', 'bread', 'cereal', 'can'][int(task // 4)]
+        rg, db, = False, task % 4
     else:
         rg, db = True, None
 
-    tries = 0
     while not success:
-        tries += 1
         np.random.seed()
         env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
         controller = PickPlaceController(env.env)
@@ -146,7 +145,6 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None, r
     if renderer:
         env.close()
     
-    print(tries)
     controller.disconnect()
     del controller
     del env
