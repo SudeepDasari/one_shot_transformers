@@ -1,12 +1,8 @@
 from robosuite.environments.panda_pick_place import PandaPickPlace as DefaultPandaPickPlace
 from robosuite.environments.panda import PandaEnv
 from hem.robosuite.arena.bin_arena import BinsArena
-from robosuite.models.objects import (
-    MilkObject,
-    BreadObject,
-    CerealObject,
-    CanObject,
-)
+from hem.robosuite.objects.custom_xml_objects import BreadObject, CerealObject, MilkObject, CanObject
+from hem.robosuite.tasks.pick_place import PickPlaceTask
 from robosuite.models.objects import (
     MilkVisualObject,
     BreadVisualObject,
@@ -14,7 +10,6 @@ from robosuite.models.objects import (
     CanVisualObject,
 )
 from collections import OrderedDict
-from robosuite.models.tasks import PickPlaceTask, UniformRandomSampler
 from robosuite.utils.mjcf_utils import string_to_array
 import robosuite.utils.transform_utils as T
 import numpy as np

@@ -59,7 +59,7 @@ class PickPlaceController:
         self._base_quat = Quaternion(matrix=self._base_rot)
         self._hover_delta = 0.2
         if 'Milk' in self._object_name:
-            self._clearance = -0.03
+            self._clearance = -0.01
     
     def _get_target_pose(self, delta_pos, base_pos, quat, max_step=None):
         if max_step is None:
@@ -113,7 +113,9 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None, r
     else:
         rg, db = True, None
 
+    tries = 0
     while not success:
+        tries += 1
         np.random.seed()
         env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
         controller = PickPlaceController(env.env)
@@ -144,7 +146,11 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, rng=None, r
     if renderer:
         env.close()
     
+    print(tries)
     controller.disconnect()
+    del controller
+    del env
+
     if ret_env:
         copy_env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
         return traj, copy_env
