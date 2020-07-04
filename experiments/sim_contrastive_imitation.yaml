@@ -1,0 +1,26 @@
+batch_size: 40
+lr: 0.0001
+epochs: 2000
+loader_workers: 16
+
+
+dataset:
+  type: "agent teacher"
+  agent_dir: ${EXPERT_DATA}/panda/*.pkl
+  teacher_dir: ${EXPERT_DATA}/sawyer/*.pkl
+  T_context: 2
+  agent_context: 0
+  T_pair: 20
+  height: 240
+  width: 320
+  crop: [100, 0, 0, 0]
+  rand_crop: [12, 16]
+  color_jitter: [0.2, 0.3, 0.3]
+  sample_sides: True
+  state_spec: [ee_aa, gripper_qpos]
+
+policy:
+  latent_dim: 40
+  lstm_config:
+    out_dim: 64
+    n_layers: 1
