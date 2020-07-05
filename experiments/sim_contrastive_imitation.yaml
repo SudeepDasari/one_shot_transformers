@@ -18,6 +18,7 @@ dataset:
   color_jitter: [0.2, 0.3, 0.3]
   sample_sides: True
   state_spec: [ee_aa, gripper_qpos]
+  cache: True
 
 policy:
   latent_dim: 40

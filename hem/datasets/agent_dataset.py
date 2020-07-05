@@ -15,7 +15,7 @@ import pickle as pkl
 
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
-                 T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False, min_frame=0,
+                 T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False, min_frame=0, cache=False,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, rep_buffer=0, target_vid=False, reduce_bits=False):
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or T_pair > 0, "Must return (s,a) pairs or context!"
@@ -32,6 +32,11 @@ class AgentDemonstrations(Dataset):
             files = [all_files[o] for o in order]
 
         self._trajs = files
+        if cache:
+            for i in tqdm.tqdm(range(len(self._trajs))):
+                if isinstance(self._trajs[i], str):
+                    load_traj(self._trajs[i])
+
         self._im_dims = (width, height)
         self._render_dims = tuple(render_dims[::-1]) if render_dims is not None else self._im_dims
         self._crop = tuple(crop) if crop is not None else (0, 0, 0, 0)
