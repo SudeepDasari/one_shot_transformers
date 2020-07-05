@@ -11,21 +11,23 @@ from hem.datasets.util import split_files
 
 
 class AgentTeacherDataset(Dataset):
-    def __init__(self, agent_dir, teacher_dir, agent_context=None, **params):
+    def __init__(self, agent_dir, teacher_dir, agent_context=None, epoch_repeat=5, **params):
         teacher_context = params.pop('T_context', 15)
         self._agent_context = agent_context = agent_context if agent_context is not None else teacher_context
         self._agent_dataset = AgentDemonstrations(agent_dir, T_context=agent_context, **params)
         self._teacher_dataset = TeacherDemonstrations(teacher_dir, T_context=teacher_context, **params)
         assert len(self._agent_dataset) == len(self._teacher_dataset)
+        self._epoch_repeat = epoch_repeat
     
     def __len__(self):
-        return len(self._agent_dataset)
+        return len(self._agent_dataset) * self._epoch_repeat
     
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
         assert 0 <= index < len(self), "invalid index!"
 
+        index = index % len(self._agent_dataset)
         np.random.seed()
         agent_pairs, agent_context = self._agent_dataset[index]
         teacher_context = self._teacher_dataset[index]

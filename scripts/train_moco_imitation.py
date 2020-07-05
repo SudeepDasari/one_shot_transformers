@@ -13,8 +13,9 @@ if __name__ == '__main__':
     config = trainer.config
     
     # build Imitation Module and MDN Loss
-    temperature, lambda_c = config.get('temperature', 0.07), config.get('contrastive_loss_weight', 1)
-    hard_negs = config.get('n_hard_neg', 3)
+    temperature = config.get('temperature', 0.07)
+    lambda_c, lambda_ll = config.get('contrastive_loss_weight', 1), config.get('likelihood_loss_weight', 1)
+    hard_negs = config.get('n_hard_neg', 5)
     action_model = ContrastiveImitation(**config['policy'])
     contrastive_loss = torch.nn.CrossEntropyLoss()
  
@@ -30,24 +31,24 @@ if __name__ == '__main__':
         
         # compute contrastive loss on goal prediction
         batch_queries = torch.cat((embeds['positive'], embeds['negatives']), 1)
-        queue = action_model.contrast_queue.transpose(0, 1)[None].repeat((batch_queries.shape[0], 1, 1))
-        all_queries = torch.cat((batch_queries, queue), 1)
-        logits = torch.matmul(embeds['goal'], all_queries.transpose(1, 2))[:,0] / temperature
-        l_contrastive = contrastive_loss(logits, torch.zeros(batch_queries.shape[0]).long().to(device))
+        batch_queries = batch_queries.reshape((1, -1, batch_queries.shape[-1]))
+        logits = torch.matmul(embeds['goal'], batch_queries.transpose(1, 2))[:,0] / temperature
+        labels = torch.arange(logits.shape[0]) * (hard_negs + 1)
+        l_contrastive = contrastive_loss(logits, labels.to(device))
 
         # append to queue if in train mode
-        if append:
-            action_model.append(batch_queries.detach().reshape((-1, batch_queries.shape[-1])).transpose(0, 1))
+        # if append:
+        #     action_model.append(batch_queries.detach().reshape((-1, batch_queries.shape[-1])).transpose(0, 1))
 
         # calculate total loss and statistics
-        loss = neg_ll + lambda_c * l_contrastive
+        loss = lambda_ll * neg_ll + lambda_c * l_contrastive
         stats = {'neg_ll': neg_ll.item(), 'contrastive_loss': l_contrastive.item()}
         mean_ac = np.clip(action_distribution.mean.detach().cpu().numpy(), -1, 1)
         for d in range(actions.shape[2]):
             stats['l1_{}'.format(d)] = np.mean(np.abs(mean_ac[:,:,d] - actions.cpu().numpy()[:,:,d]))
         top_k = torch.topk(logits.detach(), 5, dim=1)[1].cpu().numpy()
-        stats['acc_1'] = np.sum(top_k[:,0] == 0) / batch_queries.shape[0]
-        stats['acc_5'] = np.sum([ar.any() for ar in top_k == 0]) / batch_queries.shape[0]
+        stats['acc_1'] = np.sum(top_k[:,0] == labels.cpu().numpy()) / batch_queries.shape[0]
+        stats['acc_5'] = np.sum([ar.any() for ar in top_k == labels.cpu().numpy()[:,None]]) / batch_queries.shape[0]
         return loss, stats
     
     def val_forward(m, device, context, traj):
