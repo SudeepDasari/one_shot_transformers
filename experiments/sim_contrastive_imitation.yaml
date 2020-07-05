@@ -1,7 +1,7 @@
-batch_size: 3
+batch_size: 40
 lr: 0.0001
 epochs: 2000
-loader_workers: 0
+loader_workers: 16
 
 
 dataset:
