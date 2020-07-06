@@ -47,8 +47,8 @@ if __name__ == '__main__':
         for d in range(actions.shape[2]):
             stats['l1_{}'.format(d)] = np.mean(np.abs(mean_ac[:,:,d] - actions.cpu().numpy()[:,:,d]))
         top_k = torch.topk(logits.detach(), 5, dim=1)[1].cpu().numpy()
-        stats['acc_1'] = np.sum(top_k[:,0] == labels.cpu().numpy()) / batch_queries.shape[0]
-        stats['acc_5'] = np.sum([ar.any() for ar in top_k == labels.cpu().numpy()[:,None]]) / batch_queries.shape[0]
+        stats['acc_1'] = np.sum(top_k[:,0] == labels.cpu().numpy()) / labels.shape[0]
+        stats['acc_5'] = np.sum([ar.any() for ar in top_k == labels.cpu().numpy()[:,None]]) / labels.shape[0]
         return loss, stats
     
     def val_forward(m, device, context, traj):
