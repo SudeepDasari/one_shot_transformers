@@ -5,6 +5,7 @@ from hem.models import get_model
 from hem.models.traj_embed import _NonLocalLayer
 from torchvision import models
 from hem.models.discrete_logistic import DiscreteMixLogistic
+import numpy as np
 
 
 class SplitContrastive(nn.Module):
@@ -95,7 +96,7 @@ class _VisualFeatures(nn.Module):
 
 
 class ContrastiveImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, queue_size=1600, context_T=3, n_mixtures=3, concat_state=True, hard_neg_samp=0.5):
+    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, queue_size=1600, context_T=3, n_mixtures=3, concat_state=True, hard_neg_samp=0.5, const_var=False):
         super().__init__()
         # initialize visual embeddings
         self._embed = _VisualFeatures(latent_dim, context_T)
@@ -107,12 +108,17 @@ class ContrastiveImitation(nn.Module):
         self.register_buffer('contrast_queue', contrast_queue)
 
         # action processing
+        assert n_mixtures >= 1, "must predict at least one mixture!"
         self._concat_state = concat_state
         self._action_lstm = nn.LSTM(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
         self._dist_size = torch.Size((adim, n_mixtures))
         self._mu = nn.Linear(lstm_config['out_dim'], adim * n_mixtures)
-        self._ln_scale = nn.Linear(lstm_config['out_dim'], adim * n_mixtures)
-        self._logit_prob = nn.Linear(lstm_config['out_dim'], adim * n_mixtures)
+        if const_var:
+            ln_scale = torch.randn(adim, dtype=torch.float32) / np.sqrt(adim)
+            self.register_parameter('_ln_scale', nn.Parameter(ln_scale, requires_grad=True))
+        else:
+            self._ln_scale = nn.Linear(lstm_config['out_dim'], adim * n_mixtures)
+        self._logit_prob = nn.Linear(lstm_config['out_dim'], adim * n_mixtures) if n_mixtures > 1 else None
 
     def forward(self, states, images, context, n_noise=0, ret_dist=True):
         img_embed = self._embed(images, forward_predict=False)
@@ -126,9 +132,15 @@ class ContrastiveImitation(nn.Module):
 
         # distribution variables
         mu = self._mu(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
-        ln_scale = self._ln_scale(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
-        logit_prob = self._logit_prob(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
-        
+        if isinstance(self._ln_scale, nn.Linear):
+            ln_scale = self._ln_scale(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
+        else:
+            ln_scale = self._ln_scale.reshape((1, 1, -1, 1)).expand_as(mu)
+        if self._logit_prob is not None:
+            logit_prob = self._logit_prob(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
+        else:
+            logit_prob = torch.ones_like(mu)
+
         embeds = {'goal': goal_embed}
         if n_noise:
             embeds['positive'] = img_embed[:,-1:]

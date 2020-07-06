@@ -1,7 +1,8 @@
-batch_size: 40
+batch_size: 3
 lr: 0.0001
 epochs: 2000
-loader_workers: 16
+loader_workers: 0
+save_freq: 50000
 
 
 dataset:
@@ -19,9 +20,12 @@ dataset:
   sample_sides: True
   state_spec: [ee_aa, gripper_qpos]
   cache: True
+  epoch_repeat: 20
 
 policy:
   latent_dim: 40
   lstm_config:
-    out_dim: 64
+    out_dim: 16
     n_layers: 1
+  n_mixtures: 1
+  const_var: True
