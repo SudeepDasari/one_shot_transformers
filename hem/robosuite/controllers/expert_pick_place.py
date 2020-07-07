@@ -114,6 +114,10 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
     else:
         rg, db = True, None
 
+    if ret_env:
+        env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
+        return env
+
     while not success:
         np.random.seed()
         env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
@@ -149,7 +153,4 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
     del controller
     del env
 
-    if ret_env:
-        copy_env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
-        return traj, copy_env
     return traj
