@@ -110,7 +110,11 @@ class ContrastiveImitation(nn.Module):
         # action processing
         assert n_mixtures >= 1, "must predict at least one mixture!"
         self._concat_state = concat_state
-        self._action_lstm = nn.LSTM(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
+        self._is_rnn = lstm_config.get('is_rnn', True)
+        if self._is_rnn:
+            self._action_module = nn.LSTM(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
+        else:
+            self._action_module = nn.Sequential(nn.Linear(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU(inplace=True))
         self._dist_size = torch.Size((adim, n_mixtures))
         self._mu = nn.Linear(lstm_config['out_dim'], adim * n_mixtures)
         if const_var:
@@ -127,12 +131,18 @@ class ContrastiveImitation(nn.Module):
         goal_embed = self._embed(torch.cat((images[:,:1], context), 1), forward_predict=True)
         states = torch.cat((img_embed, states), 2) if self._concat_state else img_embed
         
+        # prepare inputs
         lstm_in = goal_embed.transpose(0, 1).repeat((states.shape[1], 1, 1))
         lstm_in = torch.cat((lstm_in, states.transpose(0, 1)), 2)
-        self._action_lstm.flatten_parameters()
-        ac_pred = self._action_lstm(lstm_in)[0].transpose(0, 1)
+        
+        # process inputs
+        if self._is_rnn:
+            self._action_module.flatten_parameters()
+            ac_pred = self._action_module(lstm_in)[0].transpose(0, 1)
+        else:
+            ac_pred = self._action_module(lstm_in.transpose(0, 1))
 
-        # distribution variables
+        # predict action distribution
         mu = self._mu(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
         if isinstance(self._ln_scale, nn.Linear):
             ln_scale = self._ln_scale(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
