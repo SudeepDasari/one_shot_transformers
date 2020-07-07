@@ -24,8 +24,14 @@ if __name__ == '__main__':
         images = traj['images'][:,:-1].to(device) 
         context = context.to(device)
 
+        # use shuffle images while computing embeddings to avoid 'batch norm hacking'
+        img_flat = images.reshape((images.shape[0] * images.shape[1], 1, images.shape[2], images.shape[3], images.shape[4]))
+        order = list(range(img_flat.shape[0])); np.random.shuffle(order)
+        img_embed = m(None, img_flat[order], None, only_embed=True)[np.argsort(order)]
+        img_embed = img_embed.reshape((images.shape[0], images.shape[1], img_embed.shape[-1]))
+
         # compute predictions and action LL
-        (mu, ln_scale, logit_prob), embeds = m(states, images, context, hard_negs, ret_dist=False)
+        (mu, ln_scale, logit_prob), embeds = m(states, images, context, hard_negs, ret_dist=False, img_embed=img_embed)
         action_distribution = DiscreteMixLogistic(mu, ln_scale, logit_prob)
         neg_ll = torch.mean(-action_distribution.log_prob(actions))
         

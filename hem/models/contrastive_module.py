@@ -120,8 +120,10 @@ class ContrastiveImitation(nn.Module):
             self._ln_scale = nn.Linear(lstm_config['out_dim'], adim * n_mixtures)
         self._logit_prob = nn.Linear(lstm_config['out_dim'], adim * n_mixtures) if n_mixtures > 1 else None
 
-    def forward(self, states, images, context, n_noise=0, ret_dist=True):
-        img_embed = self._embed(images, forward_predict=False)
+    def forward(self, states, images, context, n_noise=0, ret_dist=True, only_embed=False, img_embed=None):
+        if only_embed:   # returns only the image embeddings. useful for shuffling batchnorm
+            return self._embed(images, forward_predict=False)
+        img_embed = self._embed(images, forward_predict=False) if img_embed is None else img_embed
         goal_embed = self._embed(torch.cat((images[:,:1], context), 1), forward_predict=True)
         states = torch.cat((img_embed, states), 2) if self._concat_state else img_embed
         
@@ -135,7 +137,8 @@ class ContrastiveImitation(nn.Module):
         if isinstance(self._ln_scale, nn.Linear):
             ln_scale = self._ln_scale(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
         else:
-            ln_scale = self._ln_scale.reshape((1, 1, -1, 1)).expand_as(mu)
+            ln_scale = self._ln_scale if self.training else self._ln_scale.detach()
+            ln_scale = ln_scale.reshape((1, 1, -1, 1)).expand_as(mu)
         if self._logit_prob is not None:
             logit_prob = self._logit_prob(ac_pred).reshape((ac_pred.shape[:-1] + self._dist_size))
         else:
