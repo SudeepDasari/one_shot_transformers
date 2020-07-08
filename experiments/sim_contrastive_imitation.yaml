@@ -2,7 +2,7 @@ batch_size: 40
 lr: 0.0005
 epochs: 2000
 loader_workers: 20
-save_freq: 15000
+save_freq: 10000
 
 
 dataset:

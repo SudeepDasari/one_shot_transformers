@@ -123,6 +123,7 @@ class ContrastiveImitation(nn.Module):
         else:
             self._ln_scale = nn.Linear(lstm_config['out_dim'], adim * n_mixtures)
         self._logit_prob = nn.Linear(lstm_config['out_dim'], adim * n_mixtures) if n_mixtures > 1 else None
+        self._goal_aux = nn.Sequential(nn.Linear(latent_dim, sdim), nn.ReLU(), nn.Linear(sdim, sdim))
 
     def forward(self, states, images, context, n_noise=0, ret_dist=True, only_embed=False, img_embed=None):
         if only_embed:   # returns only the image embeddings. useful for shuffling batchnorm
@@ -154,7 +155,7 @@ class ContrastiveImitation(nn.Module):
         else:
             logit_prob = torch.ones_like(mu)
 
-        embeds = {'goal': goal_embed}
+        embeds = {'goal': goal_embed, 'goal_aux': self._goal_aux(goal_embed)}
         if n_noise:
             embeds['positive'] = img_embed[:,-1:]
             n_hard_neg = max(int(img_embed.shape[1] * self._hard_neg_samp), 1)

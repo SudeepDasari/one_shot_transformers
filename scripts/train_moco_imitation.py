@@ -15,6 +15,7 @@ if __name__ == '__main__':
     # build Imitation Module and MDN Loss
     temperature = config.get('temperature', 0.07)
     lambda_c, lambda_ll = config.get('contrastive_loss_weight', 1), config.get('likelihood_loss_weight', 1)
+    lambda_aux = config.get('aux_weight', 0.5)
     hard_negs = config.get('n_hard_neg', 5)
     action_model = ContrastiveImitation(**config['policy'])
     contrastive_loss = torch.nn.CrossEntropyLoss()
@@ -24,14 +25,8 @@ if __name__ == '__main__':
         images = traj['images'][:,:-1].to(device) 
         context = context.to(device)
 
-        # use shuffle images while computing embeddings to avoid 'batch norm hacking'
-        img_flat = images.reshape((images.shape[0] * images.shape[1], 1, images.shape[2], images.shape[3], images.shape[4]))
-        order = list(range(img_flat.shape[0])); np.random.shuffle(order)
-        img_embed = m(None, img_flat[order], None, only_embed=True)[np.argsort(order)]
-        img_embed = img_embed.reshape((images.shape[0], images.shape[1], img_embed.shape[-1]))
-
         # compute predictions and action LL
-        (mu, ln_scale, logit_prob), embeds = m(states, images, context, hard_negs, ret_dist=False, img_embed=img_embed)
+        (mu, ln_scale, logit_prob), embeds = m(states, images, context, hard_negs, ret_dist=False)
         action_distribution = DiscreteMixLogistic(mu, ln_scale, logit_prob)
         neg_ll = torch.mean(-action_distribution.log_prob(actions))
         
@@ -41,14 +36,17 @@ if __name__ == '__main__':
         logits = torch.matmul(embeds['goal'], batch_queries.transpose(1, 2))[:,0] / temperature
         labels = torch.arange(logits.shape[0]) * (hard_negs + 1)
         l_contrastive = contrastive_loss(logits, labels.to(device))
+        
+        # calculate auxillary loss
+        aux_loss = torch.mean(torch.sum((states[:,-1] - embeds['goal_aux']) ** 2, 1))
 
         # append to queue if in train mode
         # if append:
         #     action_model.append(batch_queries.detach().reshape((-1, batch_queries.shape[-1])).transpose(0, 1))
 
         # calculate total loss and statistics
-        loss = lambda_ll * neg_ll + lambda_c * l_contrastive
-        stats = {'neg_ll': neg_ll.item(), 'contrastive_loss': l_contrastive.item()}
+        loss = lambda_ll * neg_ll + lambda_c * l_contrastive + lambda_aux * aux_loss
+        stats = {'neg_ll': neg_ll.item(), 'contrastive_loss': l_contrastive.item(), 'aux_loss': aux_loss.item()}
         mean_ac = np.clip(action_distribution.mean.detach().cpu().numpy(), -1, 1)
         for d in range(actions.shape[2]):
             stats['l1_{}'.format(d)] = np.mean(np.abs(mean_ac[:,:,d] - actions.cpu().numpy()[:,:,d]))
