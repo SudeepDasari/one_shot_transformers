@@ -96,7 +96,7 @@ class _VisualFeatures(nn.Module):
 
 
 class ContrastiveImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, queue_size=1600, context_T=3, n_mixtures=3, concat_state=True, hard_neg_samp=0.5, const_var=False):
+    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, queue_size=1600, context_T=3, n_mixtures=3, concat_state=True, hard_neg_samp=0.5, const_var=False, select_g=1):
         super().__init__()
         # initialize visual embeddings
         self._embed = _VisualFeatures(latent_dim, context_T)
@@ -106,6 +106,10 @@ class ContrastiveImitation(nn.Module):
         contrast_queue = F.normalize(torch.randn((latent_dim, queue_size), dtype=torch.float32), 0)
         self._queue_ptr = 0
         self.register_buffer('contrast_queue', contrast_queue)
+
+        # configure goal sampling during training
+        assert 0 <= select_g <= 1, "select_g must be valid probability"
+        self._select_g = select_g
 
         # action processing
         assert n_mixtures >= 1, "must predict at least one mixture!"
@@ -133,7 +137,8 @@ class ContrastiveImitation(nn.Module):
         states = torch.cat((img_embed, states), 2) if self._concat_state else img_embed
         
         # prepare inputs
-        lstm_in = goal_embed.transpose(0, 1).repeat((states.shape[1], 1, 1))
+        goal_in = self._sample_goal(goal_embed, img_embed[:,-1])
+        lstm_in = goal_in.transpose(0, 1).repeat((states.shape[1], 1, 1))
         lstm_in = torch.cat((lstm_in, states.transpose(0, 1)), 2)
         
         # process inputs
@@ -171,3 +176,11 @@ class ContrastiveImitation(nn.Module):
         assert self.contrast_queue.shape[1] % keys.shape[1] == 0, "key shape must divide queue length!"
         self.contrast_queue[:,self._queue_ptr:self._queue_ptr+keys.shape[1]] = keys
         self._queue_ptr = (self._queue_ptr + keys.shape[1]) % self.contrast_queue.shape[1]
+
+    def _sample_goal(self, goal, last_im):
+        if not self.training:
+            return goal
+        dist = torch.from_numpy(np.array([self._select_g, 1 - self._select_g])).float()
+        chosen = torch.multinomial(dist.view((1, 2)), goal.shape[0], replacement=True).reshape(-1)
+        chosen = torch.cat((goal, last_im[:,None]), 1)[torch.arange(goal.shape[0]), chosen]
+        return chosen[:,None]

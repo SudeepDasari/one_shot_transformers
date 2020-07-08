@@ -1,7 +1,7 @@
 batch_size: 40
-lr: 0.0005
+lr: 0.001
 epochs: 2000
-loader_workers: 20
+loader_workers: 0
 save_freq: 10000
 
 
@@ -29,3 +29,4 @@ policy:
     n_layers: 1
   n_mixtures: 1
   const_var: True
+  select_g: 0.5

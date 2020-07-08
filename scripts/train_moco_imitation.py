@@ -15,19 +15,18 @@ if __name__ == '__main__':
     # build Imitation Module and MDN Loss
     temperature = config.get('temperature', 0.07)
     lambda_c, lambda_ll = config.get('contrastive_loss_weight', 1), config.get('likelihood_loss_weight', 1)
-    lambda_aux = config.get('aux_weight', 0.5)
     hard_negs = config.get('n_hard_neg', 5)
     action_model = ContrastiveImitation(**config['policy'])
     contrastive_loss = torch.nn.CrossEntropyLoss()
  
     def forward(m, device, context, traj, append=True):
-        states, actions = traj['states'][:,:-1].to(device), traj['actions'].to(device)
-        images = traj['images'][:,:-1].to(device) 
+        states, actions = traj['states'].to(device), traj['actions'].to(device)
+        images = traj['images'].to(device) 
         context = context.to(device)
 
         # compute predictions and action LL
         (mu, ln_scale, logit_prob), embeds = m(states, images, context, hard_negs, ret_dist=False)
-        action_distribution = DiscreteMixLogistic(mu, ln_scale, logit_prob)
+        action_distribution = DiscreteMixLogistic(mu[:,:-1], ln_scale[:,:-1], logit_prob[:,:-1])
         neg_ll = torch.mean(-action_distribution.log_prob(actions))
         
         # compute contrastive loss on goal prediction
@@ -36,17 +35,10 @@ if __name__ == '__main__':
         logits = torch.matmul(embeds['goal'], batch_queries.transpose(1, 2))[:,0] / temperature
         labels = torch.arange(logits.shape[0]) * (hard_negs + 1)
         l_contrastive = contrastive_loss(logits, labels.to(device))
-        
-        # calculate auxillary loss
-        aux_loss = torch.mean(torch.sum((states[:,-1] - embeds['goal_aux']) ** 2, 1))
-
-        # append to queue if in train mode
-        # if append:
-        #     action_model.append(batch_queries.detach().reshape((-1, batch_queries.shape[-1])).transpose(0, 1))
 
         # calculate total loss and statistics
-        loss = lambda_ll * neg_ll + lambda_c * l_contrastive + lambda_aux * aux_loss
-        stats = {'neg_ll': neg_ll.item(), 'contrastive_loss': l_contrastive.item(), 'aux_loss': aux_loss.item()}
+        loss = lambda_ll * neg_ll + lambda_c * l_contrastive
+        stats = {'neg_ll': neg_ll.item(), 'contrastive_loss': l_contrastive.item()}
         mean_ac = np.clip(action_distribution.mean.detach().cpu().numpy(), -1, 1)
         for d in range(actions.shape[2]):
             stats['l1_{}'.format(d)] = np.mean(np.abs(mean_ac[:,:,d] - actions.cpu().numpy()[:,:,d]))
