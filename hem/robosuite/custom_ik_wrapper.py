@@ -24,7 +24,25 @@ def denormalize_action(norm_action, base_pos, base_quat):
     return np.concatenate((action[:3] - base_pos, quat, action[7:]))
 
 
-def post_proc_obs(obs):
+def project_point(point, sim, camera='frontview', frame_width=320, frame_height=320, crop=[80,0]):
+    model_matrix = np.zeros((3, 4))
+    model_matrix[:3, :3] = sim.data.get_camera_xmat(camera).T
+
+    fovy = sim.model.cam_fovy[sim.model.camera_name2id(camera)]
+    f = 0.5 * frame_height / np.tan(fovy * np.pi / 360)
+    camera_matrix = np.array(((f, 0, frame_width / 2), (0, f, frame_height / 2), (0, 0, 1)))
+
+    MVP_matrix = camera_matrix.dot(model_matrix)
+    world_coord = np.ones((4, 1))
+    world_coord[:3, 0] = point -sim.data.get_camera_xpos(camera)
+
+    clip = MVP_matrix.dot(world_coord)
+    row, col = clip[:2].reshape(-1) / clip[2]
+    row, col = row, frame_height - col
+    return int(max(col - crop[0], 0)), int(max(row - crop[1], 0))
+
+
+def post_proc_obs(obs, env):
     if 'image' in obs:
         obs['image'] = obs['image'][80:]
     if 'depth' in obs:
@@ -34,6 +52,7 @@ def post_proc_obs(obs):
     aa = np.concatenate(([quat.angle / np.pi], quat.axis)).astype(np.float32)
     if aa[0] < 0:
         aa[0] += 2
+    obs['eef_point'] = np.array(project_point(obs['eef_pos'], env.sim))
     obs['ee_aa'] = np.concatenate((obs['eef_pos'], aa)).astype(np.float32)
     return obs
 
@@ -43,11 +62,11 @@ class CustomIKWrapper(IKWrapper):
         base_pos = self.env.sim.data.site_xpos[self.eef_site_id]
         base_quat = self.env._right_hand_quat
         obs, reward, done, info = super().step(denormalize_action(action, base_pos, base_quat))
-        return post_proc_obs(obs), reward, done, info
+        return post_proc_obs(obs, self.env), reward, done, info
 
     def reset(self):
         obs = super().reset()
-        return post_proc_obs(obs)
+        return post_proc_obs(obs, self.env)
 
     def _get_observation(self):
-        return post_proc_obs(self.env._get_observation())
+        return post_proc_obs(self.env._get_observation(), self.env)
