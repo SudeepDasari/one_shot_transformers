@@ -14,7 +14,7 @@ import pickle as pkl
 
 
 class AgentDemonstrations(Dataset):
-    def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15,
+    def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, render_dims=None, T_context=15, extra_samp_first=0,
                  T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False, min_frame=0, cache=False,
                  color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, rep_buffer=0, target_vid=False, reduce_bits=False):
         assert mode in ['train', 'val'], "mode should be train or val!"
@@ -35,7 +35,7 @@ class AgentDemonstrations(Dataset):
         if cache:
             for i in tqdm.tqdm(range(len(self._trajs))):
                 if isinstance(self._trajs[i], str):
-                    load_traj(self._trajs[i])
+                    self._trajs[i] = load_traj(self._trajs[i])
 
         self._im_dims = (width, height)
         self._render_dims = tuple(render_dims[::-1]) if render_dims is not None else self._im_dims
@@ -61,6 +61,7 @@ class AgentDemonstrations(Dataset):
         self._target_vid = target_vid
         self._reduce_bits = reduce_bits
         self._min_frame = min_frame
+        self._extra_samp_first = extra_samp_first
 
     def __len__(self):
         return len(self._trajs)
@@ -133,7 +134,7 @@ class AgentDemonstrations(Dataset):
             ret_dict['points'] = []
 
         end = len(traj) if end is None else end
-        start = np.random.randint(0, max(1, end - self._T_pair * self._freq))
+        start = 0 if np.random.uniform() < self._extra_samp_first else np.random.randint(0, max(1, end - self._T_pair * self._freq))
         chosen_t = [j * self._freq + start for j in range(self._T_pair + 1)]
         if self._append_s0:
             chosen_t = [0] + chosen_t

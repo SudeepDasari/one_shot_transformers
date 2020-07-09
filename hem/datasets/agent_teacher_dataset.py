@@ -11,26 +11,40 @@ from hem.datasets.util import split_files
 
 
 class AgentTeacherDataset(Dataset):
-    def __init__(self, agent_dir, teacher_dir, agent_context=None, epoch_repeat=5, **params):
+    def __init__(self, agent_dir, teacher_dir, agent_context=None, traj_per_task=1, mode='train', split=[0.9, 0.1], **params):
         teacher_context = params.pop('T_context', 15)
         self._agent_context = agent_context = agent_context if agent_context is not None else teacher_context
-        self._agent_dataset = AgentDemonstrations(agent_dir, T_context=agent_context, **params)
-        self._teacher_dataset = TeacherDemonstrations(teacher_dir, T_context=teacher_context, **params)
+
+        agent_files = get_files(agent_dir)
+        teacher_files = get_files(teacher_dir)
+        assert len(agent_files) == len(teacher_files)
+        order = split_files(len(agent_files), split, mode)
+
+        self._pairs = []
+        file_2_o = {order[i]:i for i in range(len(order))}
+        for i in range(len(order)):
+            traj_ind = int(order[i] // traj_per_task)
+            for t in range(traj_per_task):
+                t = t + traj_ind * traj_per_task
+                if t in file_2_o:
+                    self._pairs.append((i, file_2_o[t]))
+
+        self._agent_dataset = AgentDemonstrations(files=[agent_files[o] for o in order], T_context=agent_context, **params)
+        self._teacher_dataset = TeacherDemonstrations(files=[teacher_files[o] for o in order], T_context=teacher_context, **params)
         assert len(self._agent_dataset) == len(self._teacher_dataset)
-        self._epoch_repeat = epoch_repeat
-    
+
     def __len__(self):
-        return len(self._agent_dataset) * self._epoch_repeat
+        return len(self._pairs)
     
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
         assert 0 <= index < len(self), "invalid index!"
 
-        index = index % len(self._agent_dataset)
+        a_i, t_i = self._pairs[index]
         np.random.seed()
-        agent_pairs, agent_context = self._agent_dataset[index]
-        teacher_context = self._teacher_dataset[index]
+        agent_pairs, agent_context = self._agent_dataset[a_i]
+        teacher_context = self._teacher_dataset[t_i]
         
         if self._agent_context:
             return teacher_context, agent_context, agent_pairs

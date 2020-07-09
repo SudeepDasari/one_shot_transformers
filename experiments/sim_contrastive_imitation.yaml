@@ -19,8 +19,8 @@ dataset:
   color_jitter: [0.2, 0.3, 0.3]
   sample_sides: True
   state_spec: [ee_aa, gripper_qpos]
-  cache: True
-  epoch_repeat: 20
+  extra_samp_first: 0.25
+  traj_per_task: 100
 
 policy:
   latent_dim: 40
