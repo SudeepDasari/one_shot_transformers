@@ -128,8 +128,11 @@ class AgentDemonstrations(Dataset):
         ret_dict = {'images': [], 'states': [], 'actions': []}
         if self._depth:
             ret_dict['depth'] = []
-        if end is None:
-            end = len(traj)
+        has_eef_point = 'eef_point' in traj.get(0, False)['obs']
+        if has_eef_point:
+            ret_dict['points'] = []
+
+        end = len(traj) if end is None else end
         start = np.random.randint(0, max(1, end - self._T_pair * self._freq))
         chosen_t = [j * self._freq + start for j in range(self._T_pair + 1)]
         if self._append_s0:
@@ -140,7 +143,14 @@ class AgentDemonstrations(Dataset):
             if self._depth:
                 depth_img = self._crop_and_resize(t['obs']['depth']).transpose((2, 0, 1))[None]
                 ret_dict['depth'].append(depth_img)
-            ret_dict['images'].append(self._crop_and_resize(t['obs']['image'])[None])
+            image = t['obs']['image']
+            ret_dict['images'].append(self._crop_and_resize(image)[None])
+            
+            if has_eef_point:
+                eef_point_img = np.zeros((int(self._im_dims[1] // 10), int(self._im_dims[0] // 10))).astype(np.float32)
+                eef_point_img[self._adjust_points(t['obs']['eef_point'], image.shape[:2])] = 1
+                ret_dict['points'].append(eef_point_img[None])
+    
             state = []
             for k in state_keys:
                 state.append(_get_tensor(k, t))
@@ -161,6 +171,13 @@ class AgentDemonstrations(Dataset):
     
     def _crop_and_resize(self, img, normalize=False):
         return resize(crop(img, self._crop), self._im_dims, normalize, self._reduce_bits)
+    
+    def _adjust_points(self, points, frame_dims):
+        h = np.clip(points[0] - self._crop[0], 0, frame_dims[0] - self._crop[1])
+        w = np.clip(points[1] - self._crop[2], 0, frame_dims[1] - self._crop[3])
+        h = float(h) / (frame_dims[0] - self._crop[0] - self._crop[1]) * self._im_dims[1]
+        w = float(w) / (frame_dims[1] - self._crop[2] - self._crop[3]) * self._im_dims[0]
+        return tuple([int(min(np.around(x / 10), int(d // 10) - 1)) for x, d in zip([h, w], self._im_dims[::-1])])
 
 
 if __name__ == '__main__':

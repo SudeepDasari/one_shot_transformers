@@ -101,6 +101,7 @@ class ContrastiveImitation(nn.Module):
         # initialize visual embeddings
         self._embed = _VisualFeatures(latent_dim, context_T)
         self._hard_neg_samp = hard_neg_samp
+        self._to_points = nn.Sequential(nn.Linear(latent_dim, 128), nn.ReLU(inplace=True), nn.Linear(128, 768))
 
         # initialize contrastive queue
         contrast_queue = F.normalize(torch.randn((latent_dim, queue_size), dtype=torch.float32), 0)
@@ -161,6 +162,8 @@ class ContrastiveImitation(nn.Module):
             logit_prob = torch.ones_like(mu)
 
         embeds = {'goal': goal_embed, 'goal_aux': self._goal_aux(goal_embed)}
+        embeds['goal_point'] = self._to_points(goal_embed[:,0])
+
         if n_noise:
             embeds['positive'] = img_embed[:,-1:]
             n_hard_neg = max(int(img_embed.shape[1] * self._hard_neg_samp), 1)
@@ -178,7 +181,7 @@ class ContrastiveImitation(nn.Module):
         self._queue_ptr = (self._queue_ptr + keys.shape[1]) % self.contrast_queue.shape[1]
 
     def _sample_goal(self, goal, last_im):
-        if not self.training:
+        if not self.training or self._select_g >= 0.99:
             return goal
         dist = torch.from_numpy(np.array([self._select_g, 1 - self._select_g])).float()
         chosen = torch.multinomial(dist.view((1, 2)), goal.shape[0], replacement=True).reshape(-1)

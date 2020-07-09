@@ -15,13 +15,16 @@ if __name__ == '__main__':
     # build Imitation Module and MDN Loss
     temperature = config.get('temperature', 0.07)
     lambda_c, lambda_ll = config.get('contrastive_loss_weight', 1), config.get('likelihood_loss_weight', 1)
+    lambda_p = config.get('point_loss_weight', 0.5)
     hard_negs = config.get('n_hard_neg', 5)
     action_model = ContrastiveImitation(**config['policy'])
     contrastive_loss = torch.nn.CrossEntropyLoss()
+    point_loss = torch.nn.CrossEntropyLoss()
  
     def forward(m, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
-        images = traj['images'].to(device) 
+        images, pnts = traj['images'].to(device), traj['points']
+        pnt_labels = torch.argmax(pnts.reshape((pnts.shape[0], pnts.shape[1], -1)), dim=2).to(device)
         context = context.to(device)
 
         # compute predictions and action LL
@@ -36,17 +39,25 @@ if __name__ == '__main__':
         labels = torch.arange(logits.shape[0]) * (hard_negs + 1)
         l_contrastive = contrastive_loss(logits, labels.to(device))
 
+        # compute point loss
+        l_points = point_loss(embeds['goal_point'], pnt_labels[:,-1])
+
         # calculate total loss and statistics
-        loss = lambda_ll * neg_ll + lambda_c * l_contrastive
-        stats = {'neg_ll': neg_ll.item(), 'contrastive_loss': l_contrastive.item()}
+        loss = lambda_ll * neg_ll + lambda_c * l_contrastive + lambda_p * l_points
+        stats = {'neg_ll': neg_ll.item(), 'contrastive_loss': l_contrastive.item(), 'l_points': l_points.item()}
         mean_ac = np.clip(action_distribution.mean.detach().cpu().numpy(), -1, 1)
         for d in range(actions.shape[2]):
             stats['l1_{}'.format(d)] = np.mean(np.abs(mean_ac[:,:,d] - actions.cpu().numpy()[:,:,d]))
         top_k = torch.topk(logits.detach(), 5, dim=1)[1].cpu().numpy()
         stats['acc_1'] = np.sum(top_k[:,0] == labels.cpu().numpy()) / labels.shape[0]
         stats['acc_5'] = np.sum([ar.any() for ar in top_k == labels.cpu().numpy()[:,None]]) / labels.shape[0]
+
+        if trainer.is_img_log_step:
+            vis_goal_point = torch.nn.functional.softmax(embeds['goal_point'].detach(), dim=1).reshape((-1, 1, 24, 32))
+            real = torch.cat((torch.zeros_like(pnts[:,-1:]), pnts[:,-1:], torch.zeros_like(pnts[:,-1:])), 1)
+            pred = torch.cat((vis_goal_point, torch.zeros_like(vis_goal_point), torch.zeros_like(vis_goal_point)), 1)
+            stats['points'] = real.cpu() + pred.cpu()
         return loss, stats
-    
     def val_forward(m, device, context, traj):
         return forward(m, device, context, traj, append=False)
     trainer.train(action_model, forward, val_fn=val_forward)
