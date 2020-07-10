@@ -92,6 +92,7 @@ class _VisualFeatures(nn.Module):
         hidden = self._spt_2_hidden(spatial_softmax)
         
         if forward_predict:
+            self._temporal_process.flatten_parameters()
             embed, _ = self._temporal_process(hidden.transpose(0, 1))
             embed = embed[-1].unsqueeze(1)
         else:
