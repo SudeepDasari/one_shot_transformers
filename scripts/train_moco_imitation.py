@@ -16,7 +16,6 @@ if __name__ == '__main__':
     temperature = config.get('temperature', 0.07)
     lambda_c, lambda_ll = config.get('contrastive_loss_weight', 1), config.get('likelihood_loss_weight', 1)
     lambda_p = config.get('point_loss_weight', 0.5)
-    n_noise, hard_neg_frac = config.get('n_hard_neg', 5), config.get('hard_neg_frac', 0.5)
     action_model = ContrastiveImitation(**config['policy'])
     contrastive_loss = torch.nn.CrossEntropyLoss()
     point_loss = torch.nn.CrossEntropyLoss()
@@ -39,22 +38,14 @@ if __name__ == '__main__':
         order = list(range(trans_flat.shape[0])); np.random.shuffle(order)
         trans_embed = m(None, trans_flat[order], None, only_embed=True)[np.argsort(order)]
         trans_embed = trans_embed.reshape((transformed_imgs.shape[0], transformed_imgs.shape[1], -1))
-        fr_logits = torch.matmul(img_embed.reshape(-1, img_embed.shape[-1]), trans_embed.reshape(-1, trans_embed.shape[-1]).transpose(0, 1)) / temperature
+        trans_embed = trans_embed.reshape(-1, trans_embed.shape[-1]).transpose(0, 1)
+        fr_logits = torch.matmul(img_embed.reshape(-1, img_embed.shape[-1]), trans_embed) / temperature
         fr_labels = torch.arange(img_embed.shape[0] * img_embed.shape[1]).to(device)
         frame_contrastive = contrastive_loss(fr_logits, fr_labels)
 
-        # sample positives and negatives for goal prediction
-        positive = trans_embed[:,-1:]
-        n_hard_neg = max(int(trans_embed.shape[1] * hard_neg_frac), 1)
-        assert n_noise <= n_hard_neg, "{} hard negatives available but asked to sample {}!".format(n_hard_neg, n_noise)
-        chosen = torch.multinomial(torch.ones((images.shape[0], n_hard_neg)), n_noise, replacement=False)
-        negatives = trans_embed[torch.arange(images.shape[0])[:,None], chosen]
-
         # compute contrastive loss on goal prediction
-        batch_queries = torch.cat((positive, negatives), 1)
-        batch_queries = batch_queries.reshape((1, -1, batch_queries.shape[-1]))
-        logits = torch.matmul(embeds['goal'], batch_queries.transpose(1, 2))[:,0] / temperature
-        labels = torch.arange(logits.shape[0]) * (n_noise + 1)
+        logits = torch.matmul(embeds['goal'], trans_embed[None])[:,0] / temperature
+        labels = img_embed.shape[1] * (1 + torch.arange(logits.shape[0])) - 1
         goal_contrastive = contrastive_loss(logits, labels.to(device))
         l_contrastive = frame_contrastive + goal_contrastive
 
