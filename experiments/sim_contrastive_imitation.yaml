@@ -1,7 +1,7 @@
 batch_size: 20
 lr: 0.0005
 epochs: 2000
-loader_workers: 0
+loader_workers: 20
 save_freq: 10000
 
 
