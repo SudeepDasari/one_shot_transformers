@@ -78,34 +78,28 @@ class _VisualFeatures(nn.Module):
     def __init__(self, latent_dim, context_T, embed_hidden=256):
         super().__init__()
         self._resnet_features = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._spt_2_hidden = nn.Sequential(nn.Linear(1024, embed_hidden), nn.ReLU())
-        self._temporal_process = nn.GRU(embed_hidden, latent_dim, 1)
-        self._to_embed =  nn.Linear(embed_hidden, latent_dim)
+        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=0.2), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
+        self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.ReLU(inplace=True), nn.Linear(embed_hidden, latent_dim))
 
     def forward(self, images, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
         features = self._resnet_features(images)
+        if forward_predict:
+            features = self._temporal_process(features.transpose(1, 2)).transpose(1, 2)
+            features = torch.mean(features, 1, keepdim=True)
+
         features = F.softmax(features.reshape((features.shape[0], features.shape[1], features.shape[2], -1)), dim=3).reshape(features.shape)
         h = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 4), 3)
         w = torch.sum(torch.linspace(-1, 1, features.shape[4]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 3), 3)
         spatial_softmax = torch.cat((h, w), 2)
-        hidden = self._spt_2_hidden(spatial_softmax)
-        
-        if forward_predict:
-            self._temporal_process.flatten_parameters()
-            embed, _ = self._temporal_process(hidden.transpose(0, 1))
-            embed = embed[-1].unsqueeze(1)
-        else:
-            embed = self._to_embed(hidden)
-        return F.normalize(embed, dim=2)
+        return F.normalize(self._to_embed(spatial_softmax), dim=2)
 
 
 class ContrastiveImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, queue_size=1600, context_T=3, n_mixtures=3, concat_state=True, hard_neg_samp=0.5, const_var=False, select_g=1):
+    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, queue_size=1600, context_T=3, n_mixtures=3, concat_state=True, const_var=False, select_g=1):
         super().__init__()
         # initialize visual embeddings
         self._embed = _VisualFeatures(latent_dim, context_T)
-        self._hard_neg_samp = hard_neg_samp
         self._to_points = nn.Sequential(nn.Linear(latent_dim, 128), nn.ReLU(inplace=True), nn.Linear(128, 768))
 
         # initialize contrastive queue
@@ -135,7 +129,7 @@ class ContrastiveImitation(nn.Module):
         self._logit_prob = nn.Linear(lstm_config['out_dim'], adim * n_mixtures) if n_mixtures > 1 else None
         self._goal_aux = nn.Sequential(nn.Linear(latent_dim, sdim), nn.ReLU(), nn.Linear(sdim, sdim))
 
-    def forward(self, states, images, context, n_noise=0, ret_dist=True, only_embed=False, img_embed=None):
+    def forward(self, states, images, context, ret_dist=True, only_embed=False, img_embed=None):
         if only_embed:   # returns only the image embeddings. useful for shuffling batchnorm
             return self._embed(images, forward_predict=False)
         img_embed = self._embed(images, forward_predict=False) if img_embed is None else img_embed
@@ -168,13 +162,7 @@ class ContrastiveImitation(nn.Module):
 
         embeds = {'goal': goal_embed, 'goal_aux': self._goal_aux(goal_embed)}
         embeds['goal_point'] = self._to_points(goal_embed[:,0])
-
-        if n_noise:
-            embeds['positive'] = img_embed[:,-1:]
-            n_hard_neg = max(int(img_embed.shape[1] * self._hard_neg_samp), 1)
-            assert n_noise <= n_hard_neg, "{} hard negatives available but asked to sample {}!".format(n_hard_neg, n_noise)
-            chosen = torch.multinomial(torch.ones((images.shape[0], n_hard_neg)), n_noise, replacement=False)
-            embeds['negatives'] = img_embed[torch.arange(images.shape[0])[:,None], chosen]
+        embeds['img_embed'] = img_embed
 
         if ret_dist:
             return DiscreteMixLogistic(mu, ln_scale, logit_prob), embeds

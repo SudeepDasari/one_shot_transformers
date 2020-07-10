@@ -1,7 +1,7 @@
-batch_size: 40
-lr: 0.001
+batch_size: 20
+lr: 0.0005
 epochs: 2000
-loader_workers: 20
+loader_workers: 0
 save_freq: 10000
 
 
@@ -16,11 +16,14 @@ dataset:
   width: 320
   crop: [100, 0, 0, 0]
   rand_crop: [12, 16]
-  color_jitter: [0.2, 0.3, 0.3]
+  rand_translate: [12, 16]
+  color_jitter: [0.4, 0.4, 0.4]
   sample_sides: True
   state_spec: [ee_aa, gripper_qpos]
-  extra_samp_first: 0.25
+  extra_samp_first: 0.1
   traj_per_task: 100
+  random_targets: True
+  randomize_vid_frames: True
 
 policy:
   latent_dim: 40
