@@ -78,21 +78,25 @@ class _VisualFeatures(nn.Module):
     def __init__(self, latent_dim, context_T, embed_hidden=256):
         super().__init__()
         self._resnet_features = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=0.2), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
-        self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.ReLU(inplace=True), nn.Linear(embed_hidden, latent_dim))
+        self._spt_2_hidden = nn.Sequential(nn.Linear(1024, embed_hidden), nn.ReLU())
+        self._temporal_process = nn.GRU(embed_hidden, latent_dim, 1)
+        self._to_embed =  nn.Linear(embed_hidden, latent_dim)
 
     def forward(self, images, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
         features = self._resnet_features(images)
-        if forward_predict:
-            features = self._temporal_process(features.transpose(1, 2)).transpose(1, 2)
-            features = torch.mean(features, 1, keepdim=True)
-
         features = F.softmax(features.reshape((features.shape[0], features.shape[1], features.shape[2], -1)), dim=3).reshape(features.shape)
         h = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 4), 3)
         w = torch.sum(torch.linspace(-1, 1, features.shape[4]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 3), 3)
         spatial_softmax = torch.cat((h, w), 2)
-        return F.normalize(self._to_embed(spatial_softmax), dim=2)
+        hidden = self._spt_2_hidden(spatial_softmax)
+        
+        if forward_predict:
+            embed, _ = self._temporal_process(hidden.transpose(0, 1))
+            embed = embed[-1].unsqueeze(1)
+        else:
+            embed = self._to_embed(hidden)
+        return F.normalize(embed, dim=2)
 
 
 class ContrastiveImitation(nn.Module):
