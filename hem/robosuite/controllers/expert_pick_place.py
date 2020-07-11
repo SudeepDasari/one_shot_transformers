@@ -22,9 +22,10 @@ def _clip_delta(delta, max_step=0.015):
 
 
 class PickPlaceController:
-    def __init__(self, env):
+    def __init__(self, env, tries=0):
         assert env.single_object_mode == 2, "only supports single object environments at this point!"
         self._env = env
+        self._g_tol = 5e-2 ** (tries + 1)
         self.reset()
         
     def _calculate_quat(self, angle):
@@ -39,17 +40,14 @@ class PickPlaceController:
         # TODO this line violates abstraction barriers but so does the reference implementation in robosuite
         self._jpos_getter = lambda : np.array(self._env._joint_positions)
 
-        self._rise_t = 23
         if isinstance(self._env, SawyerEnv):
             self._obs_name = 'eef_pos'
             self._default_speed = 0.15
             self._final_thresh = 1e-2
-            self._clearance = 0.03
         elif isinstance(self._env, PandaEnv):
             self._obs_name = 'eef_pos'
             self._default_speed = 0.15
             self._final_thresh = 6e-2
-            self._clearance = 0.03
         else:
             raise NotImplementedError
 
@@ -58,9 +56,8 @@ class PickPlaceController:
         self._base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
         self._base_quat = Quaternion(matrix=self._base_rot)
         self._hover_delta = 0.2
-        if 'Milk' in self._object_name:
-            self._clearance = -0.01
-    
+        self._clearance = 0.03 if 'Milk' not in self._object_name else -0.01
+
     def _get_target_pose(self, delta_pos, base_pos, quat, max_step=None):
         if max_step is None:
             max_step = self._default_speed
@@ -73,16 +70,21 @@ class PickPlaceController:
 
     def act(self, obs):
         if self._t == 0:
+            self._start = -1
             y = -(obs['{}_pos'.format(self._object_name)][1] - obs[self._obs_name][1])
             x = obs['{}_pos'.format(self._object_name)][0] - obs[self._obs_name][0]
             angle = np.arctan2(y, x) - np.pi/3 if 'Cereal' in self._object_name else np.arctan2(y, x)
             self._target_quat = self._calculate_quat(angle)
 
-        if self._t < 15:
+        if self._start < 0 and self._t < 15:
+            if np.linalg.norm(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, self._hover_delta]) < self._g_tol or self._t == 14:
+                self._start = self._t
+                self._rise_t = self._start + 8
+
             quat_t = Quaternion.slerp(self._base_quat, self._target_quat, min(1, float(self._t) / 5))
             eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] + [0, 0, self._hover_delta], obs['eef_pos'], quat_t)
             action = np.concatenate((eef_pose, [-1]))
-        elif self._t < 25: 
+        elif self._t < self._start + 10: 
             if self._t  < self._rise_t:
                 eef_pose = self._get_target_pose(obs['{}_pos'.format(self._object_name)] - obs[self._obs_name] - [0, 0, self._clearance], obs['eef_pos'], self._target_quat)  
                 action = np.concatenate((eef_pose, [-1]))
@@ -105,7 +107,7 @@ class PickPlaceController:
         p.disconnect()
 
 
-def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False):
+def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False, seed=None):
     success, use_object = False, ''
     if task is not None:
         assert 0 <= task <= 15, "task should be in [0, 15]"
@@ -118,10 +120,12 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
         env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
         return env
 
+    seed = seed if seed is not None else random.getrandbits(32)
+    tries = 0
     while not success:
-        np.random.seed()
+        np.random.seed(seed + int(tries // 3))
         env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
-        controller = PickPlaceController(env.env)
+        controller = PickPlaceController(env.env, tries=tries)
         obs = env.reset()
         mj_state = env.sim.get_state().flatten()
         sim_xml = env.model.get_xml()
@@ -146,6 +150,8 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
             if reward:
                 success = True
                 break
+        tries += 1
+
     if renderer:
         env.close()
     

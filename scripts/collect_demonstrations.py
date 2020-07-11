@@ -18,10 +18,11 @@ def save_rollout(env_type, save_dir, camera_obs=True, random_reach=False, n_per_
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
             continue
         task = int((n % (16 * n_per_group)) // n_per_group)
+        seed = 263237945 + int(n // (16 * n_per_group)) * n_per_group + n % n_per_group
         if random_reach:
             traj = get_random_trajectory(env_type, camera_obs, renderer)
         else:
-            traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task)
+            traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task, seed=seed)
         pkl.dump({'traj': traj, 'env_type': env_type}, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
 
