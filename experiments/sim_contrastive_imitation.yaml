@@ -20,7 +20,7 @@ dataset:
   color_jitter: [0.4, 0.4, 0.4]
   sample_sides: True
   state_spec: [ee_aa, gripper_qpos]
-  extra_samp_first: 0.1
+  extra_samp_bound: 0.2
   traj_per_task: 100
   random_targets: True
   randomize_vid_frames: True
