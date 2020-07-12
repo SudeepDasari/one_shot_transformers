@@ -1,7 +1,7 @@
-batch_size: 3
+batch_size: 40
 lr: 0.0005
 epochs: 2000
-loader_workers: 0
+loader_workers: 20
 save_freq: 10000
 
 
@@ -11,7 +11,7 @@ dataset:
   teacher_dir: ${EXPERT_DATA}/sawyer/*.pkl
   T_context: 2
   agent_context: 0
-  T_pair: 10
+  T_pair: 20
   height: 240
   width: 320
   crop: [100, 0, 0, 0]
