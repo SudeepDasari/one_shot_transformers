@@ -10,7 +10,7 @@ import pickle as pkl
 import random
 
 
-def save_rollout(env_type, save_dir, camera_obs=True, random_reach=False, n_per_group=1, N=0, renderer=False):
+def save_rollout(env_type, save_dir, camera_obs=True, random_seed=False, n_per_group=1, N=0, renderer=False):
     if isinstance(N, int):
         N = [N]
 
@@ -18,11 +18,8 @@ def save_rollout(env_type, save_dir, camera_obs=True, random_reach=False, n_per_
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
             continue
         task = int((n % (16 * n_per_group)) // n_per_group)
-        seed = 263237945 + int(n // (16 * n_per_group)) * n_per_group + n % n_per_group
-        if random_reach:
-            traj = get_random_trajectory(env_type, camera_obs, renderer)
-        else:
-            traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task, seed=seed)
+        seed = None if random_seed else 263237945 + int(n // (16 * n_per_group)) * n_per_group + n % n_per_group
+        traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task, seed=seed)
         pkl.dump({'traj': traj, 'env_type': env_type}, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
 
@@ -36,7 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--env', default='SawyerPickPlaceCan', type=str, help="Environment name")
     parser.add_argument('--collect_cam', action='store_true', help="If flag then will collect camera observation")
     parser.add_argument('--renderer', action='store_true', help="If flag then will display rendering GUI")
-    parser.add_argument('--random_reach', action='store_true', help="If flag then will collect random reach policy data instead of expert pickplace")
+    parser.add_argument('--random_seed', action='store_true', help="If flag then will collect data from random envs")
     args = parser.parse_args()
     assert args.num_workers > 0, "num_workers must be positive!"
 
@@ -46,10 +43,10 @@ if __name__ == '__main__':
         assert os.path.isdir(args.save_dir), "directory specified but is file and not directory!"
 
     if args.num_workers == 1:
-        save_rollout(args.env, args.save_dir, args.collect_cam, args.random_reach, args.per_task_group, list(range(args.N)), args.renderer)
+        save_rollout(args.env, args.save_dir, args.collect_cam, args.random_seed, args.per_task_group, list(range(args.N)), args.renderer)
     else:
         assert not args.renderer, "can't display rendering when using multiple workers"
 
         with Pool(cpu_count()) as p:
-            f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam, args.random_reach, args.per_task_group)
+            f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam, args.random_seed, args.per_task_group)
             p.map(f, range(args.N))
