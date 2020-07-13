@@ -9,11 +9,11 @@ import numpy as np
 
 
 class _VisualFeatures(nn.Module):
-    def __init__(self, latent_dim, context_T, embed_hidden=256):
+    def __init__(self, latent_dim, context_T, embed_hidden=256, dropout=0.2):
         super().__init__()
         self._resnet_features = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=0.2), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
-        self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.ReLU(inplace=True), nn.Linear(embed_hidden, latent_dim))
+        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=dropout), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
+        self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
 
     def forward(self, images, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
@@ -67,7 +67,14 @@ class InverseImitation(nn.Module):
         # action processing
         assert n_mixtures >= 1, "must predict at least one mixture!"
         self._concat_state, self._n_mixtures = concat_state, n_mixtures
-        self._action_module = nn.LSTM(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
+        self._is_rnn = lstm_config.get('is_rnn', True)
+        if self._is_rnn:
+            self._action_module = nn.LSTM(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
+        else:
+            l1, l2 = [nn.Linear(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU()], []
+            for _ in range(lstm_config['n_layers'] - 1):
+                l2.extend([nn.Linear(lstm_config['out_dim'], lstm_config['out_dim']), nn.ReLU()])
+            self._action_module = nn.Sequential(*(l1 + l2))
         self._imitation_dist = _DiscreteLogHead(lstm_config['out_dim'], adim, n_mixtures, const_var)
 
     def forward(self, states, images, context, ret_dist=True):
@@ -80,10 +87,13 @@ class InverseImitation(nn.Module):
         mu_inv, scale_inv, logit_inv = self._inv_model(inv_in)
 
         # predict behavior cloning distribution
-        lstm_in = img_embed[:,-1:].transpose(0, 1).repeat((states.shape[1], 1, 1))
-        lstm_in = torch.cat((lstm_in, states.transpose(0, 1)), 2)
-        self._action_module.flatten_parameters()
-        ac_pred = self._action_module(lstm_in)[0].transpose(0, 1)
+        ac_in = goal_embed.transpose(0, 1).repeat((states.shape[1], 1, 1))
+        ac_in = torch.cat((ac_in, states.transpose(0, 1)), 2)
+        if self._is_rnn:
+            self._action_module.flatten_parameters()
+            ac_pred = self._action_module(ac_in)[0].transpose(0, 1)
+        else:
+            ac_pred = self._action_module(ac_in.transpose(0, 1))
         mu_bc, scale_bc, logit_bc = self._imitation_dist(ac_pred)
 
         out = {}
