@@ -55,7 +55,7 @@ class _DiscreteLogHead(nn.Module):
 
 
 class InverseImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, context_T=3, n_mixtures=3, concat_state=True, const_var=False):
+    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, context_T=3, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False):
         super().__init__()
         # initialize visual embeddings
         self._embed = _VisualFeatures(latent_dim, context_T)
@@ -68,9 +68,11 @@ class InverseImitation(nn.Module):
         assert n_mixtures >= 1, "must predict at least one mixture!"
         self._concat_state, self._n_mixtures = concat_state, n_mixtures
         self._is_rnn = lstm_config.get('is_rnn', True)
+        self._multi_step_pred = multi_step_pred
         if self._is_rnn:
             self._action_module = nn.LSTM(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
         else:
+            assert not self._multi_step_pred, "multi-step prediction only makes sense with RNN"
             l1, l2 = [nn.Linear(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU()], []
             for _ in range(lstm_config['n_layers'] - 1):
                 l2.extend([nn.Linear(lstm_config['out_dim'], lstm_config['out_dim']), nn.ReLU()])
@@ -87,8 +89,9 @@ class InverseImitation(nn.Module):
         mu_inv, scale_inv, logit_inv = self._inv_model(inv_in)
 
         # predict behavior cloning distribution
+        s_in = torch.cat((states[:,:1], torch.zeros_like(states[:,1:])), 1) if self._multi_step_pred else states
         ac_in = goal_embed.transpose(0, 1).repeat((states.shape[1], 1, 1))
-        ac_in = torch.cat((ac_in, states.transpose(0, 1)), 2)
+        ac_in = torch.cat((ac_in, s_in.transpose(0, 1)), 2)
         if self._is_rnn:
             self._action_module.flatten_parameters()
             ac_pred = self._action_module(ac_in)[0].transpose(0, 1)
