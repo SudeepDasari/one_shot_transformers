@@ -15,13 +15,15 @@ class _VisualFeatures(nn.Module):
         self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=dropout), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
         self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
 
-    def forward(self, images, forward_predict):
+    def forward(self, images, forward_predict, ret_features=False):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
         features = self._resnet_features(images)
         if forward_predict:
             features = self._temporal_process(features.transpose(1, 2)).transpose(1, 2)
             features = torch.mean(features, 1, keepdim=True)
-
+        
+        if ret_features:
+            return features
         features = F.softmax(features.reshape((features.shape[0], features.shape[1], features.shape[2], -1)), dim=3).reshape(features.shape)
         h = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 4), 3)
         w = torch.sum(torch.linspace(-1, 1, features.shape[4]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 3), 3)
@@ -55,10 +57,19 @@ class _DiscreteLogHead(nn.Module):
 
 
 class InverseImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, context_T=3, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False):
+    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, context_T=2, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False):
         super().__init__()
         # initialize visual embeddings
-        self._embed = _VisualFeatures(latent_dim, context_T)
+        self._embed = _VisualFeatures(latent_dim, context_T + int(bool(goal_is_st)))
+
+        # if needed initialize goal embedding weights
+        self._goal_is_st, goal_dim = goal_is_st, goal_dim if goal_dim is not None else latent_dim
+        if self._goal_is_st:
+            assert goal_dim == latent_dim, "if goal vec is s_t then they must have same dim!"
+        else:
+            g_dim, pf_dim = max(256, 2 * goal_dim), latent_dim + goal_dim
+            self._to_goal = nn.Sequential(nn.Linear(512, g_dim), nn.Dropout(), nn.ReLU(), nn.Linear(g_dim, goal_dim))
+            self._pred_future = nn.Sequential(nn.Linear(pf_dim, pf_dim), nn.ReLU(), nn.Linear(pf_dim, latent_dim))
 
         # inverse modeling
         inv_dim = latent_dim * 2
@@ -70,10 +81,10 @@ class InverseImitation(nn.Module):
         self._is_rnn = lstm_config.get('is_rnn', True)
         self._multi_step_pred = multi_step_pred
         if self._is_rnn:
-            self._action_module = nn.LSTM(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
+            self._action_module = nn.LSTM(int(goal_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
         else:
             assert not self._multi_step_pred, "multi-step prediction only makes sense with RNN"
-            l1, l2 = [nn.Linear(int(2 * latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU()], []
+            l1, l2 = [nn.Linear(int(goal_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU()], []
             for _ in range(lstm_config['n_layers'] - 1):
                 l2.extend([nn.Linear(lstm_config['out_dim'], lstm_config['out_dim']), nn.ReLU()])
             self._action_module = nn.Sequential(*(l1 + l2))
@@ -81,7 +92,7 @@ class InverseImitation(nn.Module):
 
     def forward(self, states, images, context, ret_dist=True):
         img_embed = self._embed(images, forward_predict=False)
-        goal_embed = self._embed(torch.cat((images[:,:1], context), 1), forward_predict=True)
+        pred_latent, goal_embed = self._pred_goal(images[:,:1], context)
         states = torch.cat((img_embed, states), 2) if self._concat_state else img_embed
         
         # run inverse model
@@ -108,6 +119,16 @@ class InverseImitation(nn.Module):
             out['bc_distrib'] = (mu_bc, scale_bc, logit_bc)
             out['inverse_distrib'] = (mu_inv, scale_inv, logit_inv)
 
-        out['pred_goal'] = goal_embed
+        out['pred_goal'] = pred_latent
         out['img_embed'] = img_embed
         return out
+
+    def _pred_goal(self, img0, context):
+        if self._goal_is_st:
+            g_embed = self._embed(torch.cat((img0, context), 1), forward_predict=True)
+            return g_embed, g_embed
+        i_embed = self._embed(img0, forward_predict=False)
+        g_features = self._embed(context, forward_predict=True, ret_features=True)
+        g_embed = self._to_goal(torch.mean(g_features[:], (3, 4)))
+        pred_latent = self._pred_future(torch.cat((i_embed, g_embed), 2))
+        return pred_latent, g_embed
