@@ -10,7 +10,7 @@ import pickle as pkl
 import random
 
 
-def save_rollout(env_type, save_dir, camera_obs=True, random_seed=False, n_per_group=1, N=0, renderer=False):
+def save_rollout(env_type, save_dir, camera_obs=True, seeds=None, n_per_group=1, N=0, renderer=False):
     if isinstance(N, int):
         N = [N]
 
@@ -18,7 +18,7 @@ def save_rollout(env_type, save_dir, camera_obs=True, random_seed=False, n_per_g
         if os.path.exists('{}/traj{}.pkl'.format(save_dir, n)):
             continue
         task = int((n % (16 * n_per_group)) // n_per_group)
-        seed = None if random_seed else 263237945 + int(n // (16 * n_per_group)) * n_per_group + n % n_per_group
+        seed = None if seeds is None else seeds[n]
         traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task, seed=seed)
         pkl.dump({'traj': traj, 'env_type': env_type}, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
@@ -34,8 +34,19 @@ if __name__ == '__main__':
     parser.add_argument('--collect_cam', action='store_true', help="If flag then will collect camera observation")
     parser.add_argument('--renderer', action='store_true', help="If flag then will display rendering GUI")
     parser.add_argument('--random_seed', action='store_true', help="If flag then will collect data from random envs")
+    parser.add_argument('--n_env', default=None, type=int, help="Number of environments to collect from")
     args = parser.parse_args()
     assert args.num_workers > 0, "num_workers must be positive!"
+
+    if args.random_seed:
+        assert args.n_env is None
+        seeds = [None for _ in range(args.N)]
+    elif args.n_env:
+        envs, rng = [263237945 + i for i in range(args.n_env)], random.Random(385008283)
+        seeds = [int(rng.choice(envs)) for _ in range(args.N)]
+    else:
+        n_per_group = args.per_task_group
+        seeds = [263237945 + int(n // (16 * n_per_group)) * n_per_group + n % n_per_group for n in range(args.N)]
 
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
@@ -43,10 +54,10 @@ if __name__ == '__main__':
         assert os.path.isdir(args.save_dir), "directory specified but is file and not directory!"
 
     if args.num_workers == 1:
-        save_rollout(args.env, args.save_dir, args.collect_cam, args.random_seed, args.per_task_group, list(range(args.N)), args.renderer)
+        save_rollout(args.env, args.save_dir, args.collect_cam, seeds, args.per_task_group, list(range(args.N)), args.renderer)
     else:
         assert not args.renderer, "can't display rendering when using multiple workers"
 
         with Pool(cpu_count()) as p:
-            f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam, args.random_seed, args.per_task_group)
+            f = functools.partial(save_rollout, args.env, args.save_dir, args.collect_cam, seeds, args.per_task_group)
             p.map(f, range(args.N))
