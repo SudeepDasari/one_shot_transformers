@@ -46,7 +46,7 @@ class _VisualGoalFeatures(_VisualFeatures):
         
         # calculate goal embedding
         f_goal = self._goal_nonloc(f_goal)
-        goal_embed = F.normalize(self._2_goal_vec(torch.mean(f_goal, (2, 3, 4))), dim=2)
+        goal_embed = F.normalize(self._2_goal_vec(torch.mean(f_goal, (2, 3, 4)))[:,None], dim=2)
 
         # calculate forward prediction
         pred_features = self._temporal_process(torch.cat((f_img0, f_goal), 2)).transpose(1, 2)
