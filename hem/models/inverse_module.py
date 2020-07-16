@@ -15,20 +15,43 @@ class _VisualFeatures(nn.Module):
         self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=dropout), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
         self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
 
-    def forward(self, images, forward_predict, ret_features=False):
+    def forward(self, images, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
         features = self._resnet_features(images)
         if forward_predict:
             features = self._temporal_process(features.transpose(1, 2)).transpose(1, 2)
             features = torch.mean(features, 1, keepdim=True)
-        
-        if ret_features:
-            return features
+        return F.normalize(self._to_embed(self._spatial_softmax(features)), dim=2)
+    
+    def _spatial_softmax(self, features):
         features = F.softmax(features.reshape((features.shape[0], features.shape[1], features.shape[2], -1)), dim=3).reshape(features.shape)
         h = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 4), 3)
         w = torch.sum(torch.linspace(-1, 1, features.shape[4]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 3), 3)
-        spatial_softmax = torch.cat((h, w), 2)
-        return F.normalize(self._to_embed(spatial_softmax), dim=2)
+        return torch.cat((h, w), 2)
+
+
+class _VisualGoalFeatures(_VisualFeatures):
+    def __init__(self, goal_dim, latent_dim, context_T, embed_hidden=256, dropout=0.4):
+        super().__init__(latent_dim, context_T, embed_hidden, dropout)
+        self._goal_nonloc = _NonLocalLayer(512, 512, 128, dropout=dropout)
+        self._2_goal_vec = nn.Sequential(nn.Linear(512, embed_hidden), nn.Dropout(), nn.ReLU(), nn.Linear(embed_hidden, goal_dim))
+    
+    def forward(self, img0, context=None, forward_predict=False):
+        if context is None or not forward_predict:
+            assert forward_predict == False, "forward predict requires context"
+            return super().forward(img0, False)
+
+        f_img0 = self._resnet_features(img0).transpose(1, 2)
+        f_goal = self._resnet_features(context).transpose(1, 2)
+        
+        # calculate goal embedding
+        f_goal = self._goal_nonloc(f_goal)
+        goal_embed = F.normalize(self._2_goal_vec(torch.mean(f_goal, (2, 3, 4))), dim=2)
+
+        # calculate forward prediction
+        pred_features = self._temporal_process(torch.cat((f_img0, f_goal), 2)).transpose(1, 2)
+        pred_features = torch.mean(pred_features, 1, keepdim=True)
+        return F.normalize(self._to_embed(self._spatial_softmax(pred_features)), dim=2), goal_embed
 
 
 class _DiscreteLogHead(nn.Module):
@@ -57,19 +80,15 @@ class _DiscreteLogHead(nn.Module):
 
 
 class InverseImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, context_T=2, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False):
+    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, context_T=3, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False):
         super().__init__()
-        # initialize visual embeddings
-        self._embed = _VisualFeatures(latent_dim, context_T + int(bool(goal_is_st)))
-
-        # if needed initialize goal embedding weights
+        # check goal embedding arguments
         self._goal_is_st, goal_dim = goal_is_st, goal_dim if goal_dim is not None else latent_dim
-        if self._goal_is_st:
-            assert goal_dim == latent_dim, "if goal vec is s_t then they must have same dim!"
-        else:
-            g_dim, pf_dim = max(256, 2 * goal_dim), latent_dim + goal_dim
-            self._to_goal = nn.Sequential(nn.Linear(512, g_dim), nn.Dropout(), nn.ReLU(), nn.Linear(g_dim, goal_dim))
-            self._pred_future = nn.Sequential(nn.Linear(pf_dim, pf_dim), nn.ReLU(), nn.Linear(pf_dim, latent_dim))
+        if goal_is_st:
+            assert goal_dim == latent_dim, "goal dim must be same as latent if goal is to be s_t!"
+
+        # initialize visual embeddings
+        self._embed = _VisualFeatures(latent_dim, context_T) if goal_is_st else _VisualGoalFeatures(goal_dim, latent_dim, context_T)
 
         # inverse modeling
         inv_dim = latent_dim * 2
@@ -127,8 +146,4 @@ class InverseImitation(nn.Module):
         if self._goal_is_st:
             g_embed = self._embed(torch.cat((img0, context), 1), forward_predict=True)
             return g_embed, g_embed
-        i_embed = self._embed(img0, forward_predict=False)
-        g_features = self._embed(context, forward_predict=True, ret_features=True)
-        g_embed = self._to_goal(torch.mean(g_features[:], (3, 4)))
-        pred_latent = self._pred_future(torch.cat((i_embed, g_embed), 2))
-        return pred_latent, g_embed
+        return self._embed(img0, context, forward_predict=True)
