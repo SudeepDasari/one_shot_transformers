@@ -9,10 +9,11 @@ import numpy as np
 
 
 class _VisualFeatures(nn.Module):
-    def __init__(self, latent_dim, context_T, embed_hidden=256, dropout=0.2):
+    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_attn=1):
         super().__init__()
         self._resnet_features = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=dropout), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
+        t_proc = [_NonLocalLayer(512, 512, 128, dropout=dropout) for _ in range(n_attn)] + [nn.Conv3d(512, 512, (context_T, 1, 1), 1)]
+        self._temporal_process = nn.Sequential(*t_proc)
         self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
 
     def forward(self, images, forward_predict):
@@ -31,8 +32,8 @@ class _VisualFeatures(nn.Module):
 
 
 class _VisualGoalFeatures(_VisualFeatures):
-    def __init__(self, goal_dim, latent_dim, context_T, embed_hidden=256, dropout=0.4):
-        super().__init__(latent_dim, context_T, embed_hidden, dropout)
+    def __init__(self, goal_dim, latent_dim, context_T=3, embed_hidden=256, dropout=0.4, n_attn=1):
+        super().__init__(latent_dim, context_T, embed_hidden, dropout, n_attn)
         self._goal_nonloc = _NonLocalLayer(512, 512, 128, dropout=dropout)
         self._2_goal_vec = nn.Sequential(nn.Linear(512, embed_hidden), nn.Dropout(), nn.ReLU(), nn.Linear(embed_hidden, goal_dim))
     
@@ -80,7 +81,7 @@ class _DiscreteLogHead(nn.Module):
 
 
 class InverseImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, context_T=3, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False):
+    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False, vis=dict()):
         super().__init__()
         # check goal embedding arguments
         self._goal_is_st, goal_dim = goal_is_st, goal_dim if goal_dim is not None else latent_dim
@@ -88,7 +89,7 @@ class InverseImitation(nn.Module):
             assert goal_dim == latent_dim, "goal dim must be same as latent if goal is to be s_t!"
 
         # initialize visual embeddings
-        self._embed = _VisualFeatures(latent_dim, context_T) if goal_is_st else _VisualGoalFeatures(goal_dim, latent_dim, context_T)
+        self._embed = _VisualFeatures(latent_dim, **vis) if goal_is_st else _VisualGoalFeatures(goal_dim, latent_dim, **vis)
 
         # inverse modeling
         inv_dim = latent_dim * 2
