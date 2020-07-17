@@ -101,7 +101,7 @@ class InverseImitation(nn.Module):
 
         # inverse modeling
         inv_dim = latent_dim * 2
-        self._inv_model = nn.Sequential(nn.Linear(inv_dim, inv_dim), nn.ReLU(inplace=True), _DiscreteLogHead(inv_dim, adim, n_mixtures, const_var))
+        self._inv_model = nn.Sequential(nn.Linear(inv_dim, lstm_config['out_dim']), nn.ReLU())
 
         # action processing
         assert n_mixtures >= 1, "must predict at least one mixture!"
@@ -116,7 +116,7 @@ class InverseImitation(nn.Module):
             for _ in range(lstm_config['n_layers'] - 1):
                 l2.extend([nn.Linear(lstm_config['out_dim'], lstm_config['out_dim']), nn.ReLU()])
             self._action_module = nn.Sequential(*(l1 + l2))
-        self._imitation_dist = _DiscreteLogHead(lstm_config['out_dim'], adim, n_mixtures, const_var)
+        self._action_dist = _DiscreteLogHead(lstm_config['out_dim'], adim, n_mixtures, const_var)
 
     def forward(self, states, images, context, ret_dist=True):
         img_embed = self._embed(images, context, False)
@@ -125,7 +125,7 @@ class InverseImitation(nn.Module):
         
         # run inverse model
         inv_in = torch.cat((img_embed[:,:-1], img_embed[:,1:]), 2)
-        mu_inv, scale_inv, logit_inv = self._inv_model(inv_in)
+        mu_inv, scale_inv, logit_inv = self._action_dist(self._inv_model(inv_in))
 
         # predict behavior cloning distribution
         s_in = torch.cat((states[:,:1], torch.zeros_like(states[:,1:])), 1) if self._multi_step_pred else states
@@ -136,7 +136,7 @@ class InverseImitation(nn.Module):
             ac_pred = self._action_module(ac_in)[0].transpose(0, 1)
         else:
             ac_pred = self._action_module(ac_in.transpose(0, 1))
-        mu_bc, scale_bc, logit_bc = self._imitation_dist(ac_pred)
+        mu_bc, scale_bc, logit_bc = self._action_dist(ac_pred)
 
         out = {}
         # package distribution in objects or as tensors
