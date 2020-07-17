@@ -151,9 +151,7 @@ class AgentDemonstrations(Dataset):
             ret_dict['images'].append(self._crop_and_resize(image)[None])
             
             if has_eef_point:
-                eef_point_img = np.zeros((int(self._im_dims[1] // 10), int(self._im_dims[0] // 10))).astype(np.float32)
-                eef_point_img[self._adjust_points(t['obs']['eef_point'], image.shape[:2])] = 1
-                ret_dict['points'].append(eef_point_img[None])
+                ret_dict['points'].append(np.array(self._adjust_points(t['obs']['eef_point'], image.shape[:2]))[None])
     
             state = []
             for k in state_keys:
@@ -189,7 +187,7 @@ class AgentDemonstrations(Dataset):
         w = np.clip(points[1] - self._crop[2], 0, frame_dims[1] - self._crop[3])
         h = float(h) / (frame_dims[0] - self._crop[0] - self._crop[1]) * self._im_dims[1]
         w = float(w) / (frame_dims[1] - self._crop[2] - self._crop[3]) * self._im_dims[0]
-        return tuple([int(min(np.around(x / 10), int(d // 10) - 1)) for x, d in zip([h, w], self._im_dims[::-1])])
+        return tuple([int(min(x, d - 1)) for x, d in zip([h, w], self._im_dims[::-1])])
 
 
 if __name__ == '__main__':

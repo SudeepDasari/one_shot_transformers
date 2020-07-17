@@ -13,10 +13,11 @@ if __name__ == '__main__':
     config = trainer.config
     
     # build Imitation Module and MDN Loss
+    pnt_weight = config.get('pnt_weight', 0.1)
     action_model = InverseImitation(**config['policy'])
     def forward(m, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
-        images = traj['transformed'].to(device)
+        images, pnts = traj['transformed'].to(device), traj['points'].to(device).long()
         context = context.to(device)
 
         # compute predictions and action LL
@@ -34,7 +35,22 @@ if __name__ == '__main__':
 
         loss = l_goal + l_inv + l_bc
         stats = {'inverse_loss':l_inv.item(), 'bc_loss': l_bc.item(), 'goal_loss': l_goal.item()}
-        
+
+        if 'point_ll' in out:
+            l_point = torch.mean(-out['point_ll'][range(pnts.shape[0]), pnts[:,-1,0], pnts[:,-1,1]])
+            loss = loss + pnt_weight * l_point
+            stats['point_loss'] = l_point.item()
+            if trainer.is_img_log_step:
+                points_img = torch.exp(out['point_ll'].detach())
+                maxes = points_img.reshape((points_img.shape[0], -1)).max(dim=1)[0] + 1e-3
+                stats['point_img'] = (points_img[:,None] / maxes.reshape((-1, 1, 1, 1))).repeat((1, 3, 1, 1))
+                for i in range(-5, 5):
+                    for j in range(-5, 5):
+                        pnt_color = torch.from_numpy(np.array([0,1,0])).float().to(stats['point_img'].device).reshape((1, 3))
+                        h = torch.clamp(pnts[:,-1,0] + i, 0, images.shape[3] - 1)
+                        w = torch.clamp(pnts[:,-1,1] + j, 0, images.shape[4] - 1)
+                        stats['point_img'][range(pnts.shape[0]),:,h,w] = pnt_color
+
         mean_ac = np.clip(action_distribution.mean.detach().cpu().numpy(), -1, 1)
         mean_inv = np.clip(inv_distribution.mean.detach().cpu().numpy(), -1, 1)
         for d in range(actions.shape[2]):

@@ -6,6 +6,7 @@ from hem.models.traj_embed import _NonLocalLayer
 from torchvision import models
 from hem.models.discrete_logistic import DiscreteMixLogistic
 import numpy as np
+from torch.distributions import MultivariateNormal
 
 
 class _VisualFeatures(nn.Module):
@@ -21,7 +22,7 @@ class _VisualFeatures(nn.Module):
     def forward(self, images, context, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
         im_in = torch.cat((context, images), 1) if forward_predict or self._st_goal_attn else images
-        features = self._st_attn(self._resnet_features(im_in))
+        features = self._st_attn(self._resnet_features(im_in).transpose(1, 2)).transpose(1, 2)
         if forward_predict:
             features = self._temporal_process(features.transpose(1, 2)).transpose(1, 2)
             features = torch.mean(features, 1, keepdim=True)
@@ -89,7 +90,7 @@ class _DiscreteLogHead(nn.Module):
 
 
 class InverseImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, n_mixtures=3, concat_state=True, const_var=False, multi_step_pred=False, vis=dict()):
+    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, n_mixtures=3, concat_state=True, const_var=False, pred_point=False, vis=dict()):
         super().__init__()
         # check goal embedding arguments
         self._goal_is_st, goal_dim = goal_is_st, goal_dim if goal_dim is not None else latent_dim
@@ -103,15 +104,16 @@ class InverseImitation(nn.Module):
         inv_dim = latent_dim * 2
         self._inv_model = nn.Sequential(nn.Linear(inv_dim, lstm_config['out_dim']), nn.ReLU())
 
+        # additional point loss on goal
+        self._2_point = nn.Sequential(nn.Linear(goal_dim, goal_dim), nn.ReLU(), nn.Linear(goal_dim, 5)) if pred_point else None
+
         # action processing
         assert n_mixtures >= 1, "must predict at least one mixture!"
         self._concat_state, self._n_mixtures = concat_state, n_mixtures
         self._is_rnn = lstm_config.get('is_rnn', True)
-        self._multi_step_pred = multi_step_pred
         if self._is_rnn:
             self._action_module = nn.LSTM(int(goal_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
         else:
-            assert not self._multi_step_pred, "multi-step prediction only makes sense with RNN"
             l1, l2 = [nn.Linear(int(goal_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU()], []
             for _ in range(lstm_config['n_layers'] - 1):
                 l2.extend([nn.Linear(lstm_config['out_dim'], lstm_config['out_dim']), nn.ReLU()])
@@ -128,9 +130,8 @@ class InverseImitation(nn.Module):
         mu_inv, scale_inv, logit_inv = self._action_dist(self._inv_model(inv_in))
 
         # predict behavior cloning distribution
-        s_in = torch.cat((states[:,:1], torch.zeros_like(states[:,1:])), 1) if self._multi_step_pred else states
         ac_in = goal_embed.transpose(0, 1).repeat((states.shape[1], 1, 1))
-        ac_in = torch.cat((ac_in, s_in.transpose(0, 1)), 2)
+        ac_in = torch.cat((ac_in, states.transpose(0, 1)), 2)
         if self._is_rnn:
             self._action_module.flatten_parameters()
             ac_pred = self._action_module(ac_in)[0].transpose(0, 1)
@@ -149,6 +150,7 @@ class InverseImitation(nn.Module):
 
         out['pred_goal'] = pred_latent
         out['img_embed'] = img_embed
+        self._pred_point(out, goal_embed, images.shape[3:])
         return out
 
     def _pred_goal(self, img0, context):
@@ -156,3 +158,19 @@ class InverseImitation(nn.Module):
             g_embed = self._embed(img0, context, True)
             return g_embed, g_embed
         return self._embed(img0, context, True)
+
+    def _pred_point(self, obs, goal_embed, im_shape, min_var=0.05):
+        if self._2_point is None:
+            return
+        
+        point_dist = self._2_point(goal_embed[:,0])
+        mu = point_dist[:,:2]
+        c1, c2, c3 = F.softplus(point_dist[:,2])[:,None], point_dist[:,3][:,None], F.softplus(point_dist[:,4])[:,None]
+        covar = torch.cat((c1 + min_var, c2, c2, c3 + min_var), dim=1).reshape((-1, 2, 2))
+        mu, covar = [x.unsqueeze(1).unsqueeze(1) for x in (mu, covar)]
+        point_dist = MultivariateNormal(mu, covariance_matrix=covar)
+
+        h = torch.linspace(-1, 1, im_shape[0]).reshape((1, -1, 1, 1)).repeat((1, 1, im_shape[1], 1))
+        w = torch.linspace(-1, 1, im_shape[1]).reshape((1, 1, -1, 1)).repeat((1, im_shape[0], 1, 1))
+        hw = torch.cat((h, w), 3).repeat((goal_embed.shape[0], 1, 1, 1)).to(goal_embed.device)
+        obs['point_ll'] = point_dist.log_prob(hw)
