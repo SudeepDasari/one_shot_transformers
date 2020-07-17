@@ -9,22 +9,31 @@ import numpy as np
 
 
 class _VisualFeatures(nn.Module):
-    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_attn=1):
+    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False):
         super().__init__()
         self._resnet_features = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        t_proc = [_NonLocalLayer(512, 512, 128, dropout=dropout) for _ in range(n_attn)] + [nn.Conv3d(512, 512, (context_T, 1, 1), 1)]
-        self._temporal_process = nn.Sequential(*t_proc)
-        self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
+        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=dropout), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
+        in_dim, self._use_ss = 1024 if use_ss else 512, use_ss
+        self._to_embed = nn.Sequential(nn.Linear(in_dim, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
+        self._st_goal_attn = st_goal_attn
+        self._st_attn = nn.Sequential(*[_NonLocalLayer(512, 512, 128, dropout=dropout, causal=True) for _ in range(n_st_attn)])
 
-    def forward(self, images, forward_predict):
+    def forward(self, images, context, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
-        features = self._resnet_features(images)
+        im_in = torch.cat((context, images), 1) if forward_predict or self._st_goal_attn else images
+        features = self._st_attn(self._resnet_features(im_in))
         if forward_predict:
             features = self._temporal_process(features.transpose(1, 2)).transpose(1, 2)
             features = torch.mean(features, 1, keepdim=True)
-        return F.normalize(self._to_embed(self._spatial_softmax(features)), dim=2)
+        elif self._st_goal_attn:
+            T_ctxt = context.shape[1]
+            features = features[:,T_ctxt:]
+        return F.normalize(self._to_embed(self._spatial_embed(features)), dim=2)
     
-    def _spatial_softmax(self, features):
+    def _spatial_embed(self, features):
+        if not self._use_ss:
+            return torch.mean(features, (3, 4))
+
         features = F.softmax(features.reshape((features.shape[0], features.shape[1], features.shape[2], -1)), dim=3).reshape(features.shape)
         h = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 4), 3)
         w = torch.sum(torch.linspace(-1, 1, features.shape[4]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 3), 3)
@@ -32,15 +41,14 @@ class _VisualFeatures(nn.Module):
 
 
 class _VisualGoalFeatures(_VisualFeatures):
-    def __init__(self, goal_dim, latent_dim, context_T=3, embed_hidden=256, dropout=0.4, n_attn=1):
-        super().__init__(latent_dim, context_T, embed_hidden, dropout, n_attn)
+    def __init__(self, goal_dim, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False):
+        super().__init__(latent_dim, context_T, embed_hidden, dropout, n_st_attn, use_ss, st_goal_attn)
         self._goal_nonloc = _NonLocalLayer(512, 512, 128, dropout=dropout)
         self._2_goal_vec = nn.Sequential(nn.Linear(512, embed_hidden), nn.Dropout(), nn.ReLU(), nn.Linear(embed_hidden, goal_dim))
     
-    def forward(self, img0, context=None, forward_predict=False):
-        if context is None or not forward_predict:
-            assert forward_predict == False, "forward predict requires context"
-            return super().forward(img0, False)
+    def forward(self, img0, context, forward_predict):
+        if not forward_predict:
+            return super().forward(img0, context, False)
 
         f_img0 = self._resnet_features(img0).transpose(1, 2)
         f_goal = self._resnet_features(context).transpose(1, 2)
@@ -52,7 +60,7 @@ class _VisualGoalFeatures(_VisualFeatures):
         # calculate forward prediction
         pred_features = self._temporal_process(torch.cat((f_img0, f_goal), 2)).transpose(1, 2)
         pred_features = torch.mean(pred_features, 1, keepdim=True)
-        return F.normalize(self._to_embed(self._spatial_softmax(pred_features)), dim=2), goal_embed
+        return F.normalize(self._to_embed(self._spatial_embed(pred_features)), dim=2), goal_embed
 
 
 class _DiscreteLogHead(nn.Module):
@@ -111,7 +119,7 @@ class InverseImitation(nn.Module):
         self._imitation_dist = _DiscreteLogHead(lstm_config['out_dim'], adim, n_mixtures, const_var)
 
     def forward(self, states, images, context, ret_dist=True):
-        img_embed = self._embed(images, forward_predict=False)
+        img_embed = self._embed(images, context, False)
         pred_latent, goal_embed = self._pred_goal(images[:,:1], context)
         states = torch.cat((img_embed, states), 2) if self._concat_state else img_embed
         
@@ -145,6 +153,6 @@ class InverseImitation(nn.Module):
 
     def _pred_goal(self, img0, context):
         if self._goal_is_st:
-            g_embed = self._embed(torch.cat((img0, context), 1), forward_predict=True)
+            g_embed = self._embed(img0, context, True)
             return g_embed, g_embed
-        return self._embed(img0, context, forward_predict=True)
+        return self._embed(img0, context, True)

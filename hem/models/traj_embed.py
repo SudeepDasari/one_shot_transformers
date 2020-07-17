@@ -53,9 +53,8 @@ class PositionalEncoding(nn.Module):
 
 
 class _NonLocalLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, feedforward_dim=512, dropout=0, temperature=None):
+    def __init__(self, in_dim, out_dim, feedforward_dim=512, dropout=0, temperature=None, causal=False):
         super().__init__()
-
         self._temperature = temperature if temperature is not None else np.sqrt(in_dim)
         self._K = nn.Conv3d(in_dim, feedforward_dim, 1, bias=False)
         self._V = nn.Conv3d(in_dim, feedforward_dim, 1, bias=False)
@@ -63,13 +62,18 @@ class _NonLocalLayer(nn.Module):
         self._out = nn.Conv3d(feedforward_dim, out_dim, 1)
         self._a1, self._drop1 = nn.ReLU(inplace=dropout==0), nn.Dropout3d(dropout)
         self._norm = nn.BatchNorm3d(out_dim)
-    
+        self._causal = causal
+
     def forward(self, inputs):
         K, Q, V = self._K(inputs), self._Q(inputs), self._V(inputs)
         B, C, T, H, W = K.shape
         K, Q, V = [t.reshape((B, C, T*H*W)) for t in (K, Q, V)]
-        KQ = torch.matmul(K.transpose(1, 2), Q)
-        attn = F.softmax(KQ / self._temperature, 2)
+        KQ = torch.matmul(K.transpose(1, 2), Q) / self._temperature
+        if self._causal:
+            mask = torch.tril(torch.ones((T,T))).to(KQ.device)
+            mask = mask.repeat_interleave(H*W,0).repeat_interleave(H*W, 1)
+            KQ = KQ + torch.log(mask)[None]
+        attn = F.softmax(KQ, 2)
         V = torch.matmul(V, attn.transpose(1, 2)).reshape((B, C, T, H, W))
         return self._norm(inputs + self._drop1(self._a1(self._out(V))))
 
