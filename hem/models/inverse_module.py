@@ -159,16 +159,16 @@ class InverseImitation(nn.Module):
             return g_embed, g_embed
         return self._embed(img0, context, True)
 
-    def _pred_point(self, obs, goal_embed, im_shape, min_var=0.05):
+    def _pred_point(self, obs, goal_embed, im_shape, min_std=0.03):
         if self._2_point is None:
             return
         
         point_dist = self._2_point(goal_embed[:,0])
         mu = point_dist[:,:2]
         c1, c2, c3 = F.softplus(point_dist[:,2])[:,None], point_dist[:,3][:,None], F.softplus(point_dist[:,4])[:,None]
-        covar = torch.cat((c1 + min_var, c2, c2, c3 + min_var), dim=1).reshape((-1, 2, 2))
-        mu, covar = [x.unsqueeze(1).unsqueeze(1) for x in (mu, covar)]
-        point_dist = MultivariateNormal(mu, covariance_matrix=covar)
+        scale_tril = torch.cat((c1 + min_std, torch.zeros_like(c2), c2, c3 + min_std), dim=1).reshape((-1, 2, 2))
+        mu, scale_tril = [x.unsqueeze(1).unsqueeze(1) for x in (mu, scale_tril)]
+        point_dist = MultivariateNormal(mu, scale_tril=scale_tril)
 
         h = torch.linspace(-1, 1, im_shape[0]).reshape((1, -1, 1, 1)).repeat((1, 1, im_shape[1], 1))
         w = torch.linspace(-1, 1, im_shape[1]).reshape((1, 1, -1, 1)).repeat((1, im_shape[0], 1, 1))
