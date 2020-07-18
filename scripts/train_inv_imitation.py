@@ -17,7 +17,7 @@ if __name__ == '__main__':
     action_model = InverseImitation(**config['policy'])
     def forward(m, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
-        images, pnts = traj['transformed'].to(device), traj['points'].to(device).long()
+        images, pnts = traj['images'].to(device), traj['points'].to(device).long()
         context = context.to(device)
 
         # compute predictions and action LL
@@ -44,9 +44,10 @@ if __name__ == '__main__':
                 points_img = torch.exp(out['point_ll'].detach())
                 maxes = points_img.reshape((points_img.shape[0], -1)).max(dim=1)[0] + 1e-3
                 stats['point_img'] = (points_img[:,None] / maxes.reshape((-1, 1, 1, 1))).repeat((1, 3, 1, 1))
+                stats['point_img'] = 0.7 * stats['point_img'] + 0.3 * traj['target_images'][:,0].to(device)
+                pnt_color = torch.from_numpy(np.array([0,1,0])).float().to(stats['point_img'].device).reshape((1, 3))
                 for i in range(-5, 5):
                     for j in range(-5, 5):
-                        pnt_color = torch.from_numpy(np.array([0,1,0])).float().to(stats['point_img'].device).reshape((1, 3))
                         h = torch.clamp(pnts[:,-1,0] + i, 0, images.shape[3] - 1)
                         w = torch.clamp(pnts[:,-1,1] + j, 0, images.shape[4] - 1)
                         stats['point_img'][range(pnts.shape[0]),:,h,w] = pnt_color
