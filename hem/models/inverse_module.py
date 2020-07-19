@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from hem.models import get_model
-from hem.models.traj_embed import _NonLocalLayer
+from hem.models.traj_embed import NonLocalLayer, TemporalPositionalEncoding
 from torchvision import models
 from hem.models.discrete_logistic import DiscreteMixLogistic
 import numpy as np
@@ -10,14 +10,15 @@ from torch.distributions import MultivariateNormal
 
 
 class _VisualFeatures(nn.Module):
-    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False):
+    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1):
         super().__init__()
-        self._resnet_features = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=dropout), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
+        self._resnet18 = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
+        self._temporal_process = nn.Sequential(NonLocalLayer(512, 512, 128, dropout=dropout, n_heads=attn_heads), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
         in_dim, self._use_ss = 1024 if use_ss else 512, use_ss
         self._to_embed = nn.Sequential(nn.Linear(in_dim, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
         self._st_goal_attn = st_goal_attn
-        self._st_attn = nn.Sequential(*[_NonLocalLayer(512, 512, 128, dropout=dropout, causal=True) for _ in range(n_st_attn)])
+        self._st_attn = nn.Sequential(*[NonLocalLayer(512, 512, 128, dropout=dropout, causal=True, n_heads=attn_heads) for _ in range(n_st_attn)])
+        self._pe = TemporalPositionalEncoding(512, dropout) if use_pe else None
 
     def forward(self, images, context, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
@@ -40,11 +41,18 @@ class _VisualFeatures(nn.Module):
         w = torch.sum(torch.linspace(-1, 1, features.shape[4]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 3), 3)
         return torch.cat((h, w), 2)
 
+    def _resnet_features(self, x):
+        if self._pe is None:
+            return self._resnet18(x)
+        features = self._resnet18(x).transpose(1, 2)
+        features = self._pe(features).transpose(1, 2)
+        return features
+
 
 class _VisualGoalFeatures(_VisualFeatures):
     def __init__(self, goal_dim, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False):
         super().__init__(latent_dim, context_T, embed_hidden, dropout, n_st_attn, use_ss, st_goal_attn)
-        self._goal_nonloc = _NonLocalLayer(512, 512, 128, dropout=dropout)
+        self._goal_nonloc = NonLocalLayer(512, 512, 128, dropout=dropout)
         self._2_goal_vec = nn.Sequential(nn.Linear(512, embed_hidden), nn.Dropout(), nn.ReLU(), nn.Linear(embed_hidden, goal_dim))
     
     def forward(self, img0, context, forward_predict):

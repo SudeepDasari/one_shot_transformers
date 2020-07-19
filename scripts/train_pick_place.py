@@ -1,25 +1,34 @@
 import torch
-from hem.models.imitation_module import GoalStateRegression
+from hem.models.point_module import PointPredictor
 from hem.models import Trainer
-from hem.models.mdn_loss import GMMDistribution
 import numpy as np
-import matplotlib.pyplot as plt
 from hem.datasets.util import MEAN, STD
+import cv2
 
 
 if __name__ == '__main__':
-    trainer = Trainer('pick_place', "Behavior Clone model on input data conditioned on teacher video")
+    trainer = Trainer('point_pred', "Trains Point Predictor input data")
     config = trainer.config
+    
+    action_model = PointPredictor(**config['policy'])
+    def forward(m, device, context, traj, append=True):
+        images, pnts = traj['images'].to(device), traj['points'].to(device).long()
+        context = context.to(device)
 
-    # initialize behavior cloning
-    model = GoalStateRegression(**config['policy'])
-    l1_loss = torch.nn.SmoothL1Loss()
-    def train_fn(m, device, context, start_img, targets):
-        pred = m(context.to(device), start_img.to(device))
-        loss = l1_loss(pred, targets.to(device))
-
-        stats, targets, pred = {}, targets.numpy(), pred.detach().cpu().numpy()
-        for d in range(targets.shape[1]):
-            stats['l_d{}'.format(d)] = np.mean(np.abs(targets[:,d] - pred[:,d]))
+        # compute point prediction
+        point_ll = m(images, context)
+        loss = torch.mean(-point_ll[range(pnts.shape[0]), pnts[:,-1,0], pnts[:,-1,1]])
+        stats = {}
+        if trainer.is_img_log_step:
+            points_img = torch.exp(point_ll.detach())
+            maxes = points_img.reshape((points_img.shape[0], -1)).max(dim=1)[0] + 1e-3
+            stats['point_img'] = (points_img[:,None] / maxes.reshape((-1, 1, 1, 1))).repeat((1, 3, 1, 1))
+            stats['point_img'] = 0.7 * stats['point_img'] + 0.3 * traj['target_images'][:,0].to(device)
+            pnt_color = torch.from_numpy(np.array([0,1,0])).float().to(stats['point_img'].device).reshape((1, 3))
+            for i in range(-5, 5):
+                for j in range(-5, 5):
+                    h = torch.clamp(pnts[:,-1,0] + i, 0, images.shape[3] - 1)
+                    w = torch.clamp(pnts[:,-1,1] + j, 0, images.shape[4] - 1)
+                    stats['point_img'][range(pnts.shape[0]),:,h,w] = pnt_color
         return loss, stats
-    trainer.train(model, train_fn)
+    trainer.train(action_model, forward)

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from hem.models import get_model
-from hem.models.traj_embed import _NonLocalLayer
+from hem.models.traj_embed import NonLocalLayer
 from hem.models.basic_embedding import _BottleneckConv
 from torch.distributions import Normal, MultivariateNormal
 import torchvision
@@ -15,7 +15,7 @@ class CondVAE(nn.Module):
         super().__init__()
         self._l_dim = latent_dim
         self._embed = get_model('resnet')(output_raw=True, drop_dim=drop_dim)
-        self._non_locs = nn.Sequential(*[_NonLocalLayer(nloc_in, nloc_in, dropout=dropout, temperature=temp) for _ in range(n_non_loc)])
+        self._non_locs = nn.Sequential(*[NonLocalLayer(nloc_in, nloc_in, dropout=dropout, temperature=temp) for _ in range(n_non_loc)])
         self._temp_pool = nn.Sequential(nn.Conv3d(nloc_in, latent_dim * 2, 3, stride=2), nn.BatchNorm3d(latent_dim*2), nn.ReLU(inplace=True))
         self._spatial_pool = nn.AdaptiveAvgPool2d(latent_dim * 2)
         self._enc_mean, self._enc_ln_var = nn.Linear(latent_dim * 2, latent_dim), nn.Linear(latent_dim * 2, latent_dim)

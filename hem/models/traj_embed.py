@@ -52,9 +52,36 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-class _NonLocalLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, feedforward_dim=512, dropout=0, temperature=None, causal=False):
+class TemporalPositionalEncoding(nn.Module):
+    """
+    Modified PositionalEncoding from Pytorch Seq2Seq Documentation
+    source: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+    """
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
         super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-np.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(1, 2)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        assert len(x.shape) >= 3, "x requires at least 3 dims! (B, C, ..)"
+        old_shape = x.shape
+        x = x.reshape((x.shape[0], x.shape[1], -1))
+        x = x + self.pe[:,:,:x.shape[-1]]
+        return self.dropout(x).reshape(old_shape)
+
+
+class NonLocalLayer(nn.Module):
+    def __init__(self, in_dim, out_dim, feedforward_dim=512, dropout=0, temperature=None, causal=False, n_heads=1):
+        super().__init__()
+        assert feedforward_dim % n_heads == 0, "n_heads must evenly divide feedforward_dim"
+        self._n_heads = n_heads
         self._temperature = temperature if temperature is not None else np.sqrt(in_dim)
         self._K = nn.Conv3d(in_dim, feedforward_dim, 1, bias=False)
         self._V = nn.Conv3d(in_dim, feedforward_dim, 1, bias=False)
@@ -63,19 +90,21 @@ class _NonLocalLayer(nn.Module):
         self._a1, self._drop1 = nn.ReLU(inplace=dropout==0), nn.Dropout3d(dropout)
         self._norm = nn.BatchNorm3d(out_dim)
         self._causal = causal
+        self._skip = out_dim == in_dim
 
     def forward(self, inputs):
         K, Q, V = self._K(inputs), self._Q(inputs), self._V(inputs)
         B, C, T, H, W = K.shape
-        K, Q, V = [t.reshape((B, C, T*H*W)) for t in (K, Q, V)]
-        KQ = torch.matmul(K.transpose(1, 2), Q) / self._temperature
+        K, Q, V = [t.reshape((B, self._n_heads, int(C / self._n_heads), T*H*W)) for t in (K, Q, V)]
+        KQ = torch.matmul(K.transpose(2, 3), Q) / self._temperature
         if self._causal:
             mask = torch.tril(torch.ones((T,T))).to(KQ.device)
             mask = mask.repeat_interleave(H*W,0).repeat_interleave(H*W, 1)
-            KQ = KQ + torch.log(mask)[None]
-        attn = F.softmax(KQ, 2)
-        V = torch.matmul(V, attn.transpose(1, 2)).reshape((B, C, T, H, W))
-        return self._norm(inputs + self._drop1(self._a1(self._out(V))))
+            KQ = KQ + torch.log(mask).unsqueeze(0).unsqueeze(0)
+        attn = F.softmax(KQ, 3)
+        V = torch.matmul(V, attn.transpose(2, 3)).reshape((B, C, T, H, W))
+        out = inputs + self._drop1(self._a1(self._out(V))) if self._skip else self._drop1(self._a1(self._out(V)))
+        return self._norm(out)
 
 
 class AttentionGoalState(nn.Module):
@@ -83,7 +112,7 @@ class AttentionGoalState(nn.Module):
         super().__init__()
         self._pe = PositionalEncoding(ff_dim, max_len=max_pos_len, dropout=dropout)
         self._temperature = temperature if temperature is not None else np.sqrt(128)
-        self._nonloc_layers = nn.Sequential(*[_NonLocalLayer(in_dim, in_dim, ff_dim, dropout, self._temperature) for _ in range(num_attn)])
+        self._nonloc_layers = nn.Sequential(*[NonLocalLayer(in_dim, in_dim, ff_dim, dropout, self._temperature) for _ in range(num_attn)])
         self._temporal_pool = nn.Sequential(nn.Conv3d(in_dim, ff_dim, T), nn.ReLU(inplace=True))
         self._spatial_pool = nn.AdaptiveAvgPool3d(1)
         upsample_goal = [torch.nn.ConvTranspose2d(in_dim, ff_dim, 2, stride=2), nn.ReLU(inplace=True)]

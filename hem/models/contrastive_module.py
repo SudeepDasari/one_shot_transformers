@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from hem.models import get_model
-from hem.models.traj_embed import _NonLocalLayer
+from hem.models.traj_embed import NonLocalLayer
 from torchvision import models
 from hem.models.discrete_logistic import DiscreteMixLogistic
 import numpy as np
@@ -78,7 +78,7 @@ class _VisualFeatures(nn.Module):
     def __init__(self, latent_dim, context_T, embed_hidden=256):
         super().__init__()
         self._resnet_features = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._temporal_process = nn.Sequential(_NonLocalLayer(512, 512, 128, dropout=0.2), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
+        self._temporal_process = nn.Sequential(NonLocalLayer(512, 512, 128, dropout=0.2), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
         self._to_embed = nn.Sequential(nn.Linear(1024, embed_hidden), nn.ReLU(inplace=True), nn.Linear(embed_hidden, latent_dim))
 
     def forward(self, images, forward_predict):

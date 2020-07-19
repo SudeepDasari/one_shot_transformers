@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import MultivariateNormal
 import numpy as np
-from hem.models.traj_embed import _NonLocalLayer
+from hem.models.traj_embed import NonLocalLayer
 from hem.models.contrastive_module import SplitContrastive
 from hem.models.discrete_logistic import DiscreteMixLogistic
 
@@ -181,7 +181,7 @@ class _VidPrior(nn.Module):
         if embed_restore:
             embed_restore = torch.load(embed_restore, map_location=torch.device('cpu')).state_dict()
             self._embed.load_state_dict(embed_restore, strict=False)
-        self._nonlocs = nn.Sequential(*[_NonLocalLayer(loc_dim, loc_dim, temperature=temp, dropout=dropout) for _ in range(n_nonloc)])
+        self._nonlocs = nn.Sequential(*[NonLocalLayer(loc_dim, loc_dim, temperature=temp, dropout=dropout) for _ in range(n_nonloc)])
         self._project_channel = nn.Linear(loc_dim, 1)
         self._to_bottlekneck = nn.Sequential(nn.Linear(HW * T, bottleneck_dim), nn.ReLU(inplace=True), nn.Linear(bottleneck_dim, bottleneck_dim))
 
