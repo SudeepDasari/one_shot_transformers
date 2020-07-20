@@ -31,6 +31,10 @@ class PandaPickPlace(DefaultPandaPickPlace):
 
     def _get_reference(self):
         super()._get_reference()
+        self.target_bin_placements[0,0] -= 0.1
+        self.target_bin_placements[0,1] -= 0.02
+        self.target_bin_placements[2,0] += 0.025
+        self.target_bin_placements[3,0] += 0.015
         if self.single_object_mode == 2:
             self.target_bin_placements = self.target_bin_placements[self._bin_mappings]
 

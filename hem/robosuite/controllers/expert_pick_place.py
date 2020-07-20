@@ -44,17 +44,19 @@ class PickPlaceController:
             self._obs_name = 'eef_pos'
             self._default_speed = 0.15
             self._final_thresh = 1e-2
+            self._base_rot = np.array([[0, 1, 0.], [1, 0, 0.], [0., 0., -1.]])
+            self._base_quat = Quaternion(matrix=self._base_rot)
         elif isinstance(self._env, PandaEnv):
             self._obs_name = 'eef_pos'
             self._default_speed = 0.15
             self._final_thresh = 6e-2
+            self._base_rot = np.array([[0, 1, 0.], [1, 0, 0.], [0., 0., -1.]])
+            self._base_quat = Quaternion(matrix=self._base_rot)
         else:
             raise NotImplementedError
 
         self._t = 0
         self._intermediate_reached = False
-        self._base_rot = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
-        self._base_quat = Quaternion(matrix=self._base_rot)
         self._hover_delta = 0.2
         self._clearance = 0.03 if 'Milk' not in self._object_name else -0.01
 
@@ -158,5 +160,4 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
     controller.disconnect()
     del controller
     del env
-
     return traj

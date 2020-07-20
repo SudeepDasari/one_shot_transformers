@@ -17,7 +17,7 @@ class PickPlaceTask(DefaultPickPlaceTask):
             success = False
             for _ in range(5000):  # 5000 retries
                 bin_x_half = self.bin_size[0] / 2 - horizontal_radius - 0.01
-                bin_y_half = self.bin_size[1] / 2 - horizontal_radius - 0.01
+                bin_y_half = self.bin_size[1] / 2 - horizontal_radius - 0.03
                 object_x = np.random.uniform(high=bin_x_half, low=-bin_x_half)
                 object_y = np.random.uniform(high=bin_y_half, low=-bin_y_half)
 
