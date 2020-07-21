@@ -10,10 +10,10 @@ from torch.distributions import MultivariateNormal
 
 
 class _VisualFeatures(nn.Module):
-    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1):
+    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1, attn_ff=128):
         super().__init__()
         self._resnet18 = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._temporal_process = nn.Sequential(NonLocalLayer(512, 512, 128, dropout=dropout, n_heads=attn_heads), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
+        self._temporal_process = nn.Sequential(NonLocalLayer(512, 512, attn_ff, dropout=dropout, n_heads=attn_heads), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
         in_dim, self._use_ss = 1024 if use_ss else 512, use_ss
         self._to_embed = nn.Sequential(nn.Linear(in_dim, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
         self._st_goal_attn = st_goal_attn

@@ -16,6 +16,7 @@ if __name__ == '__main__':
     pnt_weight = config.get('pnt_weight', 0.1)
     goal_loss, goal_margin = config.get('goal_loss', True), config.get('goal_margin', -1)
     action_model = InverseImitation(**config['policy'])
+    inv_loss_mult = config.get('inv_loss_mult', 1.0)
     def forward(m, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
         images, pnts = traj['images'].to(device), traj['points'].to(device).long()
@@ -29,7 +30,7 @@ if __name__ == '__main__':
     
         # compute inverse model density
         inv_distribution = DiscreteMixLogistic(*out['inverse_distrib'])
-        l_inv = torch.mean(-inv_distribution.log_prob(actions))
+        l_inv = inv_loss_mult * torch.mean(-inv_distribution.log_prob(actions))
         
         # compute goal embedding
         if not goal_loss:
