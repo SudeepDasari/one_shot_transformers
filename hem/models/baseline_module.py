@@ -22,6 +22,8 @@ class ContextualLSTM(nn.Module):
         context_embed = self._embed_images(context)
         img_embed = self._embed_images(images)
         
+        self._encoder.flatten_parameters()
+        self._decoder.flatten_parameters()
         _, hidden = self._encoder(context_embed.transpose(0, 1))
         if self._use_attn:
             dec_out = []
