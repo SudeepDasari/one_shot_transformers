@@ -39,6 +39,7 @@ class PickPlaceController:
         self._target_loc = self._env.target_bin_placements[self._env.object_id] + [0, 0, 0.3]
         # TODO this line violates abstraction barriers but so does the reference implementation in robosuite
         self._jpos_getter = lambda : np.array(self._env._joint_positions)
+        self._clearance = 0.03 if 'Milk' not in self._object_name else -0.01
 
         if isinstance(self._env, SawyerEnv):
             self._obs_name = 'eef_pos'
@@ -58,7 +59,7 @@ class PickPlaceController:
         self._t = 0
         self._intermediate_reached = False
         self._hover_delta = 0.2
-        self._clearance = 0.03 if 'Milk' not in self._object_name else -0.01
+        
 
     def _get_target_pose(self, delta_pos, base_pos, quat, max_step=None):
         if max_step is None:
@@ -73,8 +74,11 @@ class PickPlaceController:
     def act(self, obs):
         if self._t == 0:
             self._start = -1
-            y = -(obs['{}_pos'.format(self._object_name)][1] - obs[self._obs_name][1])
-            x = obs['{}_pos'.format(self._object_name)][0] - obs[self._obs_name][0]
+            try:
+                y = -(obs['{}_pos'.format(self._object_name)][1] - obs[self._obs_name][1])
+                x = obs['{}_pos'.format(self._object_name)][0] - obs[self._obs_name][0]
+            except:
+                import pdb; pdb.set_trace()
             angle = np.arctan2(y, x) - np.pi/3 if 'Cereal' in self._object_name else np.arctan2(y, x)
             self._target_quat = self._calculate_quat(angle)
 
@@ -109,11 +113,15 @@ class PickPlaceController:
         p.disconnect()
 
 
-def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False, seed=None):
+def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False, seed=None, force_success=False):
+    seed = seed if seed is not None else random.getrandbits(32)
+    seed_offset = sum([int(a) for a in bytes(env_type, 'ascii')])
+    np.random.seed(seed)
+
     success, use_object = False, ''
     if task is not None:
         assert 0 <= task <= 15, "task should be in [0, 15]"
-        use_object = ['milk', 'bread', 'cereal', 'can'][int(task // 4)]
+        use_object = int(task // 4)
         rg, db, = False, task % 4
     else:
         rg, db = True, None
@@ -122,12 +130,12 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
         env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
         return env
 
-    seed = seed if seed is not None else random.getrandbits(32)
     tries = 0
     while not success:
-        np.random.seed(seed + int(tries // 3))
-        env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320)
+        np.random.seed(seed)
+        env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320, force_success=force_success)
         controller = PickPlaceController(env.env, tries=tries)
+        np.random.seed(seed + int(tries // 3) + seed_offset)
         obs = env.reset()
         mj_state = env.sim.get_state().flatten()
         sim_xml = env.model.get_xml()
@@ -137,7 +145,7 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
         env.sim.reset()
         env.sim.set_state_from_flattened(mj_state)
         env.sim.forward()
-        use_object = env.item_names_org[env.object_id].lower()
+        use_object = env.object_id
 
         traj.append(obs, raw_state=mj_state)
         for _ in range(int(env.horizon // 10)):

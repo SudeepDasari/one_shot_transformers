@@ -1,43 +1,34 @@
-def get_env(env_name, action_repeat=10, **kwargs):
-    if env_name == 'SawyerPickPlaceDistractor':
-        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceDistractor
-        env = SawyerPickPlaceDistractor
-    elif env_name == 'SawyerPickPlaceMilk':
-        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceMilk
-        env = SawyerPickPlaceMilk
-    elif env_name == 'SawyerPickPlaceBread':
-        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceBread
-        env = SawyerPickPlaceBread
-    elif env_name == 'SawyerPickPlaceCereal':
-        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceCereal
-        env = SawyerPickPlaceCereal
-    elif env_name == 'SawyerPickPlaceCan':
-        from hem.robosuite.sawyer.sawyer_pick_place import SawyerPickPlaceCan
-        env = SawyerPickPlaceCan
-    elif env_name == 'BaxterPickPlaceDistractor':
-        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceDistractor
-        env = BaxterPickPlaceDistractor
-    elif env_name == 'BaxterPickPlaceMilk':
-        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceMilk
-        env = BaxterPickPlaceMilk
-    elif env_name == 'BaxterPickPlaceBread':
-        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceBread
-        env = BaxterPickPlaceBread
-    elif env_name == 'BaxterPickPlaceCereal':
-        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceCereal
-        env = BaxterPickPlaceCereal
-    elif env_name == 'BaxterPickPlaceCan':
-        from hem.robosuite.baxter.baxter_pick_place import BaxterPickPlaceCan
-        env = BaxterPickPlaceCan
-    elif env_name == 'PandaPickPlaceDistractor':
-        from hem.robosuite.panda.panda_pick_place import PandaPickPlaceDistractor
-        env = PandaPickPlaceDistractor
-    else:
-        raise NotImplementedError
-    
-    from hem.robosuite.custom_ik_wrapper import CustomIKWrapper
-    return CustomIKWrapper(env(**kwargs), action_repeat=action_repeat)
+from hem.robosuite.objects.custom_xml_objects import BreadObject, CerealObject, MilkObject
+from hem.robosuite.objects.custom_xml_objects import BounceBox, CheezeItsBox, CleanBox, FritoBox, WooliteBox
+from hem.robosuite.objects.custom_xml_objects import CokeCan, FantaCan, DrPepperCan, MDewCan, SpriteCan
+from hem.robosuite.objects.custom_xml_objects import Orange, Lemon, Pear, Banana
+from hem.robosuite.objects.custom_xml_objects import Whiteclaw, RedChips, PurpleChips, DutchChips
+from hem.robosuite.objects.custom_xml_objects import AltoidBox, CandyBox, CardboardBox, ClaratinBox, DoveBox, FiveBox, MotrinBox, TicTacBox, ZertecBox
+import numpy as np
 
 
-from hem.robosuite.gym_wrapper import GymWrapper
-from hem.robosuite.mjc_util import postprocess_model_xml
+# create train objects and names
+train_objects = [BreadObject, CerealObject, MilkObject, BounceBox, CheezeItsBox, FritoBox]
+train_objects.extend([WooliteBox, CokeCan, FantaCan, DrPepperCan, MDewCan, SpriteCan, Orange])
+train_objects.extend([Pear, Banana, Whiteclaw, PurpleChips, DutchChips, AltoidBox, CandyBox])
+train_objects.extend([CardboardBox, ClaratinBox, FiveBox, MotrinBox, TicTacBox, ZertecBox])
+train_object_names = ['Bread', 'Cereal', 'Milk', 'Bounce', 'Cheezeits', 'Frito']
+train_object_names.extend(['Woolitebox', 'Can', 'Fantacan', 'DrPeppercan', 'MDewcan', 'Spritecan', 'Orange'])
+train_object_names.extend(['Pear', 'Banana', 'Whiteclaw', 'Purplechips', 'Dutchchips', 'Altoidbox', 'Candybox'])
+train_object_names.extend(['Cardboardbox', 'Claratinbox', 'Fivebox', 'Motrinbox', 'Tictacbox', 'Zertecbox'])
+
+
+# create test objects
+test_objects = [Lemon, CleanBox, RedChips, DoveBox]
+test_object_names = ['Lemon', 'Cleanbox', 'Redchips', 'Dovebox']
+
+
+def get_train_objects(N=4):
+    indices = np.random.choice(len(train_objects), size=(N,), replace=False)
+    return [train_objects[i] for i in indices], [train_object_names[i] for i in indices]
+
+
+def get_test_objects(N=4):
+    replace = N <= len(test_objects)
+    indices = np.random.choice(len(test_objects), size=(N,), replace=False)
+    return [test_objects[i] for i in indices], [test_objects[i] for i in indices]

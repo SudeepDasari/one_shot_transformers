@@ -16,13 +16,45 @@ import numpy as np
 
 
 class SawyerPickPlace(DefaultSawyerPickPlace):
-    def __init__(self, randomize_goal=False, single_object_mode=0, default_bin=3, no_clear=False, **kwargs):
+    def __init__(self, randomize_goal=False, single_object_mode=0, default_bin=3, no_clear=False, force_success=False, **kwargs):
         self._randomize_goal = randomize_goal
         self._no_clear = no_clear
         self._default_bin = default_bin
+        self._force_success = force_success
+        self._was_closed = False
         if randomize_goal:
             assert single_object_mode == 2, "only  works with single_object_mode==2!"
         super().__init__(single_object_mode=single_object_mode, **kwargs)
+
+    def _pre_action(self, action):
+        """Do any preprocessing before taking an action."""
+        if self._force_success and action[-1] > 0:
+            qpos_dim = self.sim.model.get_joint_qpos_addr(self.obj_to_use)[0]
+            sim_state = self.sim.get_state()
+            sim_state.qpos[qpos_dim:qpos_dim+3] = self.sim.data.site_xpos[self.eef_site_id] 
+            self.sim.set_state(sim_state)
+            self.sim.forward()
+            self._was_closed = True
+        elif self._force_success and self._was_closed:
+            qpos_dim = self.sim.model.get_joint_qpos_addr(self.obj_to_use)[0]
+            qpos_vel = self.sim.model.get_joint_qvel_addr(self.obj_to_use)[0]
+            sim_state = self.sim.get_state()
+            sim_state.qpos[qpos_dim:qpos_dim+3] = self.sim.data.site_xpos[self.eef_site_id] - [0,0,0.1]
+            sim_state.qvel[qpos_vel:qpos_vel+3] = 0
+            self.sim.set_state(sim_state)
+            self._was_closed = False
+        return super()._pre_action(action)
+
+    def _post_action(self, action):
+        """Do any housekeeping after taking an action."""
+        if self._force_success and action[-1] > 0:
+            qpos_dim = self.sim.model.get_joint_qpos_addr(self.obj_to_use)[0]
+            sim_state = self.sim.get_state()
+            sim_state.qpos[qpos_dim:qpos_dim+3] = self.sim.data.site_xpos[self.eef_site_id] 
+            self.sim.set_state(sim_state)
+            self.sim.forward()
+            self._was_closed = True
+        return super()._post_action(action)
 
     def clear_objects(self, obj):
         if self._no_clear:
@@ -35,6 +67,7 @@ class SawyerPickPlace(DefaultSawyerPickPlace):
             self.target_bin_placements = self.target_bin_placements[self._bin_mappings]
 
     def _reset_internal(self):
+        self._was_closed = False
         if self.single_object_mode  == 2:
             # randomly target bins if in single_object_mode==2
             self._bin_mappings = np.arange(len(self.object_to_id.keys()))
@@ -198,9 +231,11 @@ class SawyerPickPlaceDistractor(SawyerPickPlace):
     A new object is sampled on every reset.
     """
 
-    def __init__(self, force_object = '', randomize_goal=True, **kwargs):
+    def __init__(self, force_object=None, randomize_goal=True, **kwargs):
         assert "single_object_mode" not in kwargs, "invalid set of arguments"
-        obj = np.random.choice(['milk', 'bread', 'cereal', 'can']) if not force_object else force_object
+        items = ['milk', 'bread', 'cereal', 'can']
+        obj = np.random.choice(items) if force_object is None else force_object
+        obj = items[obj] if isinstance(obj, int) else obj
         super().__init__(single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)
 
 

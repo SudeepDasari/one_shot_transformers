@@ -37,7 +37,7 @@ class PickPlaceTask(DefaultPickPlaceTask):
                     placed_objects.append((pos, horizontal_radius))
                     self.objects[index].set("pos", array_to_string(pos))
                     # random z-rotation
-                    quat = self.sample_quat()
+                    quat = self.sample_quat(obj_mjcf.name)
                     self.objects[index].set("quat", array_to_string(quat))
                     success = True
                     break
@@ -47,9 +47,11 @@ class PickPlaceTask(DefaultPickPlaceTask):
                 raise RandomizationError("Cannot place all objects in the bins")
             index += 1
 
-    def sample_quat(self):
+    def sample_quat(self, obj_name):
         """Samples quaternions of random rotations along the z-axis."""
         if self.z_rotation:
             rot_angle = np.random.uniform(high=np.pi/4, low=0) if np.random.uniform() < 0.5 else np.random.uniform(low=3*np.pi/4, high=2*np.pi)
+            if obj_name in ('pear', 'banana'):
+                rot_angle = np.random.uniform(high=np.pi/4, low=-np.pi/4)
             return [np.cos(rot_angle / 2), 0, 0, np.sin(rot_angle / 2)]
         return [1, 0, 0, 0]
