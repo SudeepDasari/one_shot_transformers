@@ -40,10 +40,10 @@ def get_env(env_name, action_repeat=10, **kwargs):
         env = SawyerPickPlaceDiverseTrain
     elif env_name == 'PandaPickPlaceTestObjs':
         from hem.robosuite.panda.multi_objects import PandaPickPlaceDiverseTest
-        env = PandaPickPlaceDiverseTrain
+        env = PandaPickPlaceDiverseTest
     elif env_name == 'SawyerPickPlaceTestObjs':
         from hem.robosuite.sawyer.multi_objects import SawyerPickPlaceDiverseTest
-        env = SawyerPickPlaceDiverseTrain
+        env = SawyerPickPlaceDiverseTest
     else:
         raise NotImplementedError
     

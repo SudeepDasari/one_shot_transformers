@@ -29,6 +29,5 @@ def get_train_objects(N=4):
 
 
 def get_test_objects(N=4):
-    replace = N <= len(test_objects)
     indices = np.random.choice(len(test_objects), size=(N,), replace=False)
-    return [test_objects[i] for i in indices], [test_objects[i] for i in indices]
+    return [test_objects[i] for i in indices], [train_object_names[i] for i in indices]
