@@ -16,7 +16,7 @@ import pickle as pkl
 class AgentDemonstrations(Dataset):
     def __init__(self, root_dir=None, files=None, height=224, width=224, depth=False, normalize=True, crop=None, randomize_vid_frames=False, T_context=15, extra_samp_bound=0,
                  T_pair=0, freq=1, append_s0=False, mode='train', split=[0.9, 0.1], state_spec=None, action_spec=None, sample_sides=False, min_frame=0, cache=False, random_targets=False,
-                 color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, rep_buffer=0, target_vid=False, reduce_bits=False):
+                 color_jitter=None, rand_crop=None, rand_rotate=None, is_rad=False, rand_translate=None, rand_gray=None, rep_buffer=0, target_vid=False, reduce_bits=False, aux_pose=False):
         assert mode in ['train', 'val'], "mode should be train or val!"
         assert T_context >= 2 or T_pair > 0, "Must return (s,a) pairs or context!"
 
@@ -63,6 +63,7 @@ class AgentDemonstrations(Dataset):
         self._min_frame = min_frame
         self._extra_samp_bound = extra_samp_bound
         self._random_targets = random_targets
+        self._aux_pose = aux_pose
 
     def __len__(self):
         return len(self._trajs)
@@ -177,6 +178,13 @@ class AgentDemonstrations(Dataset):
         else:
             ret_dict['images'] = randomize_video(ret_dict['images'], self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)
         ret_dict['images'] = np.transpose(ret_dict['images'], (0, 3, 1, 2))
+
+        if self._aux_pose:
+            grip_close = np.array([traj.get(i, False)['action'][-1] > 0 for i in range(1, len(traj))])
+            grip_t = np.argmax(grip_close)
+            drop_t = len(traj) - 1 - np.argmax(np.logical_not(grip_close)[::-1])
+            aux_pose = [traj.get(t, False)['obs']['ee_aa'][:3] for t in (grip_t, drop_t)]
+            ret_dict['aux_pose'] = np.concatenate(aux_pose).astype(np.float32)
         return ret_dict
     
     def _crop_and_resize(self, img, normalize=False):
