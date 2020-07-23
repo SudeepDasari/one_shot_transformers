@@ -113,10 +113,11 @@ class PickPlaceController:
         p.disconnect()
 
 
-def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False, seed=None, force_success=False):
+def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, ret_env=False, seed=None, force_success=False, env_seed=None):
     seed = seed if seed is not None else random.getrandbits(32)
+    env_seed = seed if env_seed is None else env_seed
     seed_offset = sum([int(a) for a in bytes(env_type, 'ascii')])
-    np.random.seed(seed)
+    np.random.seed(env_seed)
 
     success, use_object = False, ''
     if task is not None:
@@ -132,7 +133,7 @@ def get_expert_trajectory(env_type, camera_obs=True, renderer=False, task=None, 
 
     tries = 0
     while not success:
-        np.random.seed(seed)
+        np.random.seed(env_seed)
         env = get_env(env_type, force_object=use_object, randomize_goal=rg, default_bin=db, has_renderer=renderer, reward_shaping=False, use_camera_obs=camera_obs, camera_height=320, camera_width=320, force_success=force_success)
         controller = PickPlaceController(env.env, tries=tries)
         np.random.seed(seed + int(tries // 3) + seed_offset)
