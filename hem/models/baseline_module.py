@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from hem.models import get_model
+from torchvision import models
+from hem.models.mdn_loss import MixtureDensityTop, GMMDistribution
 from hem.models.inverse_module import _DiscreteLogHead
 from hem.models.discrete_logistic import DiscreteMixLogistic
 
@@ -50,3 +52,39 @@ class ContextualLSTM(nn.Module):
         h = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 4), 3)
         w = torch.sum(torch.linspace(-1, 1, features.shape[4]).view((1, 1, 1, -1)).to(features.device) * torch.sum(features, 3), 3)
         return F.normalize(self._to_embed(torch.cat((h, w), 2)), dim=2)
+
+
+class DAMLNetwork(nn.Module):
+    def __init__(self, n_final_convs, aux_dim=6, adim=8, n_mix=2, T_context=2, const_var=True, maml_lr=None, first_order=None):
+        super().__init__()
+        vgg_pre = models.vgg16(pretrained=True).features[:5]
+        c3, a3 = nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.ReLU()
+        c4, a4 = nn.Conv2d(64, n_final_convs, 3, stride=2, padding=1), nn.ReLU()
+        c5, a5 = nn.Conv2d(n_final_convs, n_final_convs, 3, stride=1, padding=1), nn.ReLU()
+        self._visual_net = nn.Sequential(vgg_pre, c3, a3, c4, a4, c5, a5)
+        self._aux_pose = nn.Sequential(nn.Linear(n_final_convs * 2, 32), nn.ReLU(), nn.Linear(32, aux_dim))
+        self._action_mlp = nn.Sequential(nn.Linear(n_final_convs * 2, 50), nn.ReLU(), nn.Linear(50, 50), nn.ReLU(), nn.Linear(50, 50), nn.ReLU())
+        self._action_dist = MixtureDensityTop(50, adim, n_mix)
+        dim1, dim2 = T_context * (50 + 2 * n_final_convs), 50 * T_context
+        self._learned_loss = nn.Sequential(nn.Linear(dim1, dim2), nn.ReLU(), nn.LayerNorm(dim2), nn.Linear(dim2, dim2), nn.ReLU(), nn.LayerNorm(dim2), nn.Linear(dim2, 1))
+
+    def forward(self, states, images, ret_dist=True, learned_loss=False):
+        img_embed = self._embed_images(images)
+        action_mlp = self._action_mlp(img_embed)
+
+        out = {}
+        if learned_loss:
+            learned_in = torch.cat((action_mlp, img_embed), -1)
+            out['learned_loss'] = torch.squeeze(self._learned_loss(learned_in.reshape((1, -1))))
+        else:
+            mu, sigma_inv, alpha = self._action_dist(action_mlp)
+            out['action_dist'] = GMMDistribution(mu, sigma_inv, alpha) if ret_dist else (mu, sigma_inv, alpha)
+            out['aux'] = self._aux_pose(img_embed[:1])
+        return out
+
+    def _embed_images(self, images):
+        features = self._visual_net(images)
+        features = F.softmax(features.reshape((features.shape[0], features.shape[1], -1)), dim=2).reshape(features.shape)
+        h = torch.sum(torch.linspace(-1, 1, features.shape[2]).view((1, 1, -1)).to(features.device) * torch.sum(features, 3), 2)
+        w = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, -1)).to(features.device) * torch.sum(features, 2), 2)
+        return torch.cat((h, w), 1)

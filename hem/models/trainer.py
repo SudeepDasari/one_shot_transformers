@@ -17,7 +17,7 @@ import torchvision
 
 
 class Trainer:
-    def __init__(self, save_name='train', description="Default model trainer", drop_last=False):
+    def __init__(self, save_name='train', description="Default model trainer", drop_last=False, allow_val_grad=False):
         now = datetime.datetime.now()
         parser = argparse.ArgumentParser(description=description)
         parser.add_argument('experiment_file', type=str, help='path to YAML experiment config file')
@@ -33,6 +33,7 @@ class Trainer:
         def_device = 0 if args.device is None else args.device[0]
         self._device = torch.device("cuda:{}".format(def_device))
         self._device_list = args.device
+        self._allow_val_grad = allow_val_grad
 
         # parse dataset class and create train/val loaders
         dataset_class = get_dataset(self._config['dataset'].pop('type'))
@@ -105,11 +106,17 @@ class Trainer:
                         val_iter = iter(self._val_loader)
                         val_inputs = next(val_iter)
 
-                    with torch.no_grad():
+                    if self._allow_val_grad:
                         model = model.eval()
                         val_loss, val_stats = val_fn(model, self._device, *val_inputs)
                         model = model.train()
                         val_loss = self._loss_to_scalar(val_loss)
+                    else:
+                        with torch.no_grad():
+                            model = model.eval()
+                            val_loss, val_stats = val_fn(model, self._device, *val_inputs)
+                            model = model.train()
+                            val_loss = self._loss_to_scalar(val_loss)
 
                     # update running mean stat
                     if vl_running_mean is None:
