@@ -19,7 +19,7 @@ def save_rollout(env_type, save_dir, n_tasks, env_seed=False, force=False, camer
             continue
         task = int((n % (n_tasks * n_per_group)) // n_per_group)
         seed = None if seeds is None else seeds[n]
-        env_seed = seeds[n - n % n_tasks] if seeds is not None and env_seed else None
+        env_seed = seeds[n - n % n_per_group] if seeds is not None and env_seed else None
         traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task, seed=seed, force_success=force, env_seed=env_seed)
         pkl.dump({'traj': traj, 'env_type': env_type}, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
