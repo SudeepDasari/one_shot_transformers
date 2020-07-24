@@ -2,7 +2,7 @@ import torch
 import learn2learn as l2l
 from hem.models import Trainer
 from hem.models.baseline_module import DAMLNetwork
-from hem.models.mdn_loss import GMMDistribution
+from hem.models.discrete_logistic import DiscreteMixLogistic
 import numpy as np
 import matplotlib.pyplot as plt
 from hem.datasets.util import MEAN, STD
@@ -34,7 +34,7 @@ if __name__ == '__main__':
             out = learner(states[task], images[task], ret_dist=False)
             l_aux = l2error(out['aux'], aux[task][None])
             mu, sigma_inv, alpha = out['action_dist']
-            action_distribution = GMMDistribution(mu[1:-1], sigma_inv[1:-1], alpha[1:-1])
+            action_distribution = DiscreteMixLogistic(mu[1:-1], sigma_inv[1:-1], alpha[1:-1])
             l_bc = -torch.mean(action_distribution.log_prob(actions[task]))
             validation_loss = l_bc + l_aux
             error += validation_loss / states.shape[0]

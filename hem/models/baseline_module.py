@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hem.models import get_model
 from torchvision import models
-from hem.models.mdn_loss import MixtureDensityTop, GMMDistribution
 from hem.models.inverse_module import _DiscreteLogHead
 from hem.models.discrete_logistic import DiscreteMixLogistic
 
@@ -64,7 +63,7 @@ class DAMLNetwork(nn.Module):
         self._visual_net = nn.Sequential(vgg_pre, c3, a3, c4, a4, c5, a5)
         self._aux_pose = nn.Sequential(nn.Linear(n_final_convs * 2, 32), nn.ReLU(), nn.Linear(32, aux_dim))
         self._action_mlp = nn.Sequential(nn.Linear(n_final_convs * 2, 50), nn.ReLU(), nn.Linear(50, 50), nn.ReLU(), nn.Linear(50, 50), nn.ReLU())
-        self._action_dist = MixtureDensityTop(50, adim, n_mix)
+        self._action_dist = _DiscreteLogHead(50, adim, n_mix, const_var)
         dim1, dim2 = T_context * (50 + 2 * n_final_convs), 50 * T_context
         self._learned_loss = nn.Sequential(nn.Linear(dim1, dim2), nn.ReLU(), nn.LayerNorm(dim2), nn.Linear(dim2, dim2), nn.ReLU(), nn.LayerNorm(dim2), nn.Linear(dim2, 1))
 
@@ -77,8 +76,8 @@ class DAMLNetwork(nn.Module):
             learned_in = torch.cat((action_mlp, img_embed), -1)
             out['learned_loss'] = torch.squeeze(self._learned_loss(learned_in.reshape((1, -1))))
         else:
-            mu, sigma_inv, alpha = self._action_dist(action_mlp)
-            out['action_dist'] = GMMDistribution(mu, sigma_inv, alpha) if ret_dist else (mu, sigma_inv, alpha)
+            mu, sigma_inv, alpha = [x[0] for x in self._action_dist(action_mlp[None])]
+            out['action_dist'] = DiscreteMixLogistic(mu, sigma_inv, alpha) if ret_dist else (mu, sigma_inv, alpha)
             out['aux'] = self._aux_pose(img_embed[:1])
         return out
 
