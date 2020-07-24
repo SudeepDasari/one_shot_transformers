@@ -62,6 +62,6 @@ if __name__ == '__main__':
     else:
         assert not args.renderer, "can't display rendering when using multiple workers"
 
-        with Pool(cpu_count()) as p:
+        with Pool(args.num_workers) as p:
             f = functools.partial(save_rollout, args.env, args.save_dir, args.n_tasks, args.give_env_seed, args.force, args.collect_cam, seeds, args.per_task_group)
             p.map(f, range(args.N))
