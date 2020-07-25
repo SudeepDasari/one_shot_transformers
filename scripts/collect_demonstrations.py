@@ -10,7 +10,7 @@ import pickle as pkl
 import random
 
 
-def save_rollout(env_type, save_dir, n_tasks, env_seed=False, force=False, camera_obs=True, seeds=None, n_per_group=1, N=0, renderer=False):
+def save_rollout(env_type, save_dir, n_tasks, env_seed=False, force=False, camera_obs=True, seeds=None, n_per_group=1, depth=False, N=0, renderer=False):
     if isinstance(N, int):
         N = [N]
 
@@ -20,7 +20,7 @@ def save_rollout(env_type, save_dir, n_tasks, env_seed=False, force=False, camer
         task = int((n % (n_tasks * n_per_group)) // n_per_group)
         seed = None if seeds is None else seeds[n]
         env_seed = seeds[n - n % n_per_group] if seeds is not None and env_seed else None
-        traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task, seed=seed, force_success=force, env_seed=env_seed)
+        traj = get_expert_trajectory(env_type, camera_obs, renderer, task=task, seed=seed, force_success=force, env_seed=env_seed, depth=depth)
         pkl.dump({'traj': traj, 'env_type': env_type}, open('{}/traj{}.pkl'.format(save_dir, n), 'wb'))
 
 
@@ -39,6 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_tasks', default=16, type=int, help="Number of tasks in environment")
     parser.add_argument('--give_env_seed', action='store_true', help="Maintain seperate consistent environment sampling seed (for multi obj envs)")
     parser.add_argument('--force', action='store_true', help="Use this flag for teacher demos where 'good' control signals don't matter")
+    parser.add_argument('--depth', action='store_true', help="Use this flag to collect depth observations")
     args = parser.parse_args()
     assert args.num_workers > 0, "num_workers must be positive!"
 
@@ -58,10 +59,10 @@ if __name__ == '__main__':
         assert os.path.isdir(args.save_dir), "directory specified but is file and not directory!"
 
     if args.num_workers == 1:
-        save_rollout(args.env, args.save_dir, args.n_tasks, args.give_env_seed, args.force, args.collect_cam, seeds, args.per_task_group, list(range(args.N)), args.renderer)
+        save_rollout(args.env, args.save_dir, args.n_tasks, args.give_env_seed, args.force, args.collect_cam, seeds, args.per_task_group, args.depth, list(range(args.N)), args.renderer)
     else:
         assert not args.renderer, "can't display rendering when using multiple workers"
 
         with Pool(args.num_workers) as p:
-            f = functools.partial(save_rollout, args.env, args.save_dir, args.n_tasks, args.give_env_seed, args.force, args.collect_cam, seeds, args.per_task_group)
+            f = functools.partial(save_rollout, args.env, args.save_dir, args.n_tasks, args.give_env_seed, args.force, args.collect_cam, seeds, args.per_task_group, args.depth)
             p.map(f, range(args.N))

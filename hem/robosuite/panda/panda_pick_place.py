@@ -133,7 +133,8 @@ class PandaPickPlace(DefaultPandaPickPlace):
             )
             if self.camera_depth:
                 di["image"], di["depth"] = camera_obs
-                di['depth'] = (di['depth'][:,::-1].copy() - 0.992) / 0.0072
+                di['depth'] = di['depth'][:,::-1].copy()
+                di['depth'] = ((di['depth'] - 0.95) / 0.05 * 255).astype(np.uint8)
             else:
                 di["image"] = camera_obs
             di['image'] = di['image'][:,::-1].copy()
