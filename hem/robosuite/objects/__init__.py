@@ -9,18 +9,18 @@ import numpy as np
 
 # create train objects and names
 train_objects = [BreadObject, CerealObject, MilkObject, BounceBox, CheezeItsBox, FritoBox]
-train_objects.extend([WooliteBox, CokeCan, FantaCan, DrPepperCan, MDewCan, SpriteCan, Orange])
+train_objects.extend([WooliteBox, CokeCan, FantaCan, DrPepperCan, MDewCan, RedChips, Lemon])
 train_objects.extend([Pear, Banana, Whiteclaw, PurpleChips, DutchChips, AltoidBox, CandyBox])
 train_objects.extend([CardboardBox, ClaratinBox, FiveBox, MotrinBox, TicTacBox, ZertecBox])
 train_object_names = ['Bread', 'Cereal', 'Milk', 'Bounce', 'Cheezeits', 'Frito']
-train_object_names.extend(['Woolitebox', 'Can', 'Fantacan', 'DrPeppercan', 'MDewcan', 'Spritecan', 'Orange'])
+train_object_names.extend(['Woolitebox', 'Can', 'Fantacan', 'DrPeppercan', 'MDewcan', 'Redchips', 'Lemon'])
 train_object_names.extend(['Pear', 'Banana', 'Whiteclaw', 'Purplechips', 'Dutchchips', 'Altoidbox', 'Candybox'])
 train_object_names.extend(['Cardboardbox', 'Claratinbox', 'Fivebox', 'Motrinbox', 'Tictacbox', 'Zertecbox'])
 
 
 # create test objects
-test_objects = [Lemon, CleanBox, RedChips, DoveBox]
-test_object_names = ['Lemon', 'Cleanbox', 'Redchips', 'Dovebox']
+test_objects = [Orange, CleanBox, SpriteCan, DoveBox]
+test_object_names = ['Orange', 'Cleanbox', 'Spritecan', 'Dovebox']
 
 
 def get_train_objects(N=4):
