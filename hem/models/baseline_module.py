@@ -56,11 +56,18 @@ class ContextualLSTM(nn.Module):
 class DAMLNetwork(nn.Module):
     def __init__(self, n_final_convs, aux_dim=6, adim=8, n_mix=2, T_context=2, const_var=True, maml_lr=None, first_order=None):
         super().__init__()
-        vgg_pre = models.vgg16(pretrained=True).features[:5]
-        c3, a3 = nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.ReLU()
-        c4, a4 = nn.Conv2d(64, n_final_convs, 3, stride=2, padding=1), nn.ReLU()
-        c5, a5 = nn.Conv2d(n_final_convs, n_final_convs, 3, stride=1, padding=1), nn.ReLU()
-        self._visual_net = nn.Sequential(vgg_pre, c3, a3, c4, a4, c5, a5)
+        if n_final_convs == 'resnet':
+            self._is_resnet = True
+            self._visual_net = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
+            self._resnet_2_embed = nn.Sequential(nn.Linear(1024, 256), nn.Dropout(p=0.2), nn.ReLU(), nn.Linear(256, 256))
+            n_final_convs = 128
+        else:
+            self._is_resnet = False
+            vgg_pre = models.vgg16(pretrained=True).features[:5]
+            c3, a3 = nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.ReLU()
+            c4, a4 = nn.Conv2d(64, n_final_convs, 3, stride=2, padding=1), nn.ReLU()
+            c5, a5 = nn.Conv2d(n_final_convs, n_final_convs, 3, stride=1, padding=1), nn.ReLU()
+            self._visual_net = nn.Sequential(vgg_pre, c3, a3, c4, a4, c5, a5)
         self._aux_pose = nn.Sequential(nn.Linear(n_final_convs * 2, 32), nn.ReLU(), nn.Linear(32, aux_dim))
         self._action_mlp = nn.Sequential(nn.Linear(n_final_convs * 2, 50), nn.ReLU(), nn.Linear(50, 50), nn.ReLU(), nn.Linear(50, 50), nn.ReLU())
         self._action_dist = _DiscreteLogHead(50, adim, n_mix, const_var)
@@ -86,4 +93,7 @@ class DAMLNetwork(nn.Module):
         features = F.softmax(features.reshape((features.shape[0], features.shape[1], -1)), dim=2).reshape(features.shape)
         h = torch.sum(torch.linspace(-1, 1, features.shape[2]).view((1, 1, -1)).to(features.device) * torch.sum(features, 3), 2)
         w = torch.sum(torch.linspace(-1, 1, features.shape[3]).view((1, 1, -1)).to(features.device) * torch.sum(features, 2), 2)
-        return torch.cat((h, w), 1)
+        spatial_softmax = torch.cat((h, w), 1)
+        if self._is_resnet:
+            return self._resnet_2_embed(spatial_softmax)
+        return spatial_softmax
