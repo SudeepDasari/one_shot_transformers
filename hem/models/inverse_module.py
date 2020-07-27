@@ -10,15 +10,17 @@ from torch.distributions import MultivariateNormal
 
 
 class _VisualFeatures(nn.Module):
-    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1, attn_ff=128):
+    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1, attn_ff=128, extra_drop=False):
         super().__init__()
-        self._resnet18 = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
-        self._temporal_process = nn.Sequential(NonLocalLayer(512, 512, attn_ff, dropout=dropout, n_heads=attn_heads), nn.Conv3d(512, 512, (context_T, 1, 1), 1))
-        in_dim, self._use_ss = 1024 if use_ss else 512, use_ss
+        drop_dim = 3 if extra_drop else 2
+        n_convs = 256 if extra_drop else 512
+        self._resnet18 = get_model('resnet')(output_raw=True, drop_dim=drop_dim, use_resnet18=True)
+        self._temporal_process = nn.Sequential(NonLocalLayer(n_convs, n_convs, attn_ff, dropout=dropout, n_heads=attn_heads), nn.Conv3d(n_convs, n_convs, (context_T, 1, 1), 1))
+        in_dim, self._use_ss = n_convs * 2 if use_ss else n_convs, use_ss
         self._to_embed = nn.Sequential(nn.Linear(in_dim, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
         self._st_goal_attn = st_goal_attn
-        self._st_attn = nn.Sequential(*[NonLocalLayer(512, 512, 128, dropout=dropout, causal=True, n_heads=attn_heads) for _ in range(n_st_attn)])
-        self._pe = TemporalPositionalEncoding(512, dropout) if use_pe else None
+        self._st_attn = nn.Sequential(*[NonLocalLayer(n_convs, n_convs, attn_ff, dropout=dropout, causal=True, n_heads=attn_heads) for _ in range(n_st_attn)])
+        self._pe = TemporalPositionalEncoding(n_convs, dropout) if use_pe else None
 
     def forward(self, images, context, forward_predict):
         assert len(images.shape) == 5, "expects [B, T, C, H, W] tensor!"
