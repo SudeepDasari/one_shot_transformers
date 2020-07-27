@@ -44,6 +44,18 @@ def get_env(env_name, action_repeat=10, **kwargs):
     elif env_name == 'SawyerPickPlaceTestObjs':
         from hem.robosuite.sawyer.multi_objects import SawyerPickPlaceDiverseTest
         env = SawyerPickPlaceDiverseTest
+    elif env_name == 'PandaPickPlaceTrainPartialObjs':
+        from hem.robosuite.panda.multi_objects import PandaPickPlacePartialDiverseTrain
+        env = PandaPickPlacePartialDiverseTrain
+    elif env_name == 'SawyerPickPlaceTrainPartialObjs':
+        from hem.robosuite.sawyer.multi_objects import SawyerPickPlacePartialDiverseTrain
+        env = SawyerPickPlacePartialDiverseTrain
+    elif env_name == 'PandaPickPlaceTestPartialObjs':
+        from hem.robosuite.panda.multi_objects import PandaPickPlacePartialDiverseTest
+        env = PandaPickPlacePartialDiverseTest
+    elif env_name == 'SawyerPickPlaceTestPartialObjs':
+        from hem.robosuite.sawyer.multi_objects import SawyerPickPlacePartialDiverseTest
+        env = SawyerPickPlacePartialDiverseTest
     else:
         raise NotImplementedError
     

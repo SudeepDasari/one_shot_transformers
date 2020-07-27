@@ -7,6 +7,7 @@ from hem.robosuite.objects.custom_xml_objects import AltoidBox, CandyBox, Cardbo
 import numpy as np
 
 
+##################### FULL ENVIRONMENT SET #########################
 # create train objects and names
 train_objects = [BreadObject, CerealObject, MilkObject, BounceBox, CheezeItsBox, FritoBox]
 train_objects.extend([WooliteBox, CokeCan, FantaCan, DrPepperCan, MDewCan, RedChips, Lemon])
@@ -23,11 +24,26 @@ test_objects = [Orange, CleanBox, SpriteCan, DoveBox]
 test_object_names = ['Orange', 'Cleanbox', 'Spritecan', 'Dovebox']
 
 
-def get_train_objects(N=4):
-    indices = np.random.choice(len(train_objects), size=(N,), replace=False)
-    return [train_objects[i] for i in indices], [train_object_names[i] for i in indices]
+##################### PART ENVIRONMENT SET #########################
+partial_train_objects = [BreadObject, CerealObject, MilkObject, CokeCan, BounceBox, MDewCan, DoveBox, Lemon, Pear, Banana]
+partial_train_object_names = ['Bread', 'Cereal', 'Milk', 'Coke', 'Bounce', 'Mdew', 'Dove', 'Lemon', 'Pear', 'Banana']
+partial_test_objects = [Orange, SpriteCan, AltoidBox, CleanBox]
+partial_test_object_names = ['Orange', 'Sprite', 'Altoid', 'Clean']
 
 
-def get_test_objects(N=4):
+def get_train_objects(N=4, partial=False):
+    if partial:
+        objs, names = partial_train_objects, partial_train_object_names
+    else:
+        objs, names = train_objects, train_object_names
+    indices = np.random.choice(len(objs), size=(N,), replace=False)
+    return [objs[i] for i in indices], [names[i] for i in indices]
+
+
+def get_test_objects(N=4, partial=False):
+    if partial:
+        objs, names = partial_test_objects, partial_test_object_names
+    else:
+        objs, names = test_objects, test_object_names
     indices = np.random.choice(len(test_objects), size=(N,), replace=False)
-    return [test_objects[i] for i in indices], [train_object_names[i] for i in indices]
+    return [objs[i] for i in indices], [names[i] for i in indices]

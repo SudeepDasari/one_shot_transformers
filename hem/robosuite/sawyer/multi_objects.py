@@ -9,8 +9,8 @@ import numpy as np
 
 
 class SawyerPickDiverseObj(SawyerPickPlace):
-    def __init__(self, train_objects, **kwargs):
-        self.ob_inits, self.item_names = get_train_objects() if train_objects else get_test_objects()
+    def __init__(self, train_objects, partial, **kwargs):
+        self.ob_inits, self.item_names = get_train_objects(partial=partial) if train_objects else get_test_objects(partial=partial)
         super().__init__(**kwargs)
 
     def _load_model(self):
@@ -62,7 +62,7 @@ class SawyerPickPlaceDiverseTrain(SawyerPickDiverseObj):
         items = ['milk', 'bread', 'cereal', 'can']
         obj = np.random.choice(items) if force_object is None else force_object
         obj = items[obj] if isinstance(obj, int) else obj
-        super().__init__(train_objects=True, single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)
+        super().__init__(train_objects=True, partial=False, single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)
 
 
 class SawyerPickPlaceDiverseTest(SawyerPickDiverseObj):
@@ -76,4 +76,32 @@ class SawyerPickPlaceDiverseTest(SawyerPickDiverseObj):
         items = ['milk', 'bread', 'cereal', 'can']
         obj = np.random.choice(items) if force_object is None else force_object
         obj = items[obj] if isinstance(obj, int) else obj
-        super().__init__(train_objects=False, single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)
+        super().__init__(train_objects=False, partial=False, single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)
+
+
+class SawyerPickPlacePartialDiverseTrain(SawyerPickDiverseObj):
+    """
+    Easier version of task - place one object into its bin.
+    A new object is sampled on every reset.
+    """
+
+    def __init__(self, force_object=None, randomize_goal=True, **kwargs):
+        assert "single_object_mode" not in kwargs, "invalid set of arguments"
+        items = ['milk', 'bread', 'cereal', 'can']
+        obj = np.random.choice(items) if force_object is None else force_object
+        obj = items[obj] if isinstance(obj, int) else obj
+        super().__init__(train_objects=True, partial=True, single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)
+
+
+class SawyerPickPlacePartialDiverseTest(SawyerPickDiverseObj):
+    """
+    Easier version of task - place one object into its bin.
+    A new object is sampled on every reset.
+    """
+
+    def __init__(self, force_object=None, randomize_goal=True, **kwargs):
+        assert "single_object_mode" not in kwargs, "invalid set of arguments"
+        items = ['milk', 'bread', 'cereal', 'can']
+        obj = np.random.choice(items) if force_object is None else force_object
+        obj = items[obj] if isinstance(obj, int) else obj
+        super().__init__(train_objects=False, partial=True, single_object_mode=2, object_type=obj, no_clear=True, randomize_goal=randomize_goal, **kwargs)
