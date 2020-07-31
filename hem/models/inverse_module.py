@@ -10,11 +10,17 @@ from torch.distributions import MultivariateNormal
 
 
 class _VisualFeatures(nn.Module):
-    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1, attn_ff=128, extra_drop=False):
+    def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1, attn_ff=128, extra_drop=False, use_resnet18=True):
         super().__init__()
-        drop_dim = 3 if extra_drop else 2
-        n_convs = 256 if extra_drop else 512
-        self._resnet18 = get_model('resnet')(output_raw=True, drop_dim=drop_dim, use_resnet18=True)
+
+        if use_resnet18:
+            drop_dim = 3 if extra_drop else 2
+            n_convs = 256 if extra_drop else 512
+            self._resnet = get_model('resnet')(output_raw=True, drop_dim=drop_dim, use_resnet18=True)
+        else:
+            drop_dim = 3 if extra_drop else 2
+            n_convs = 1024 if extra_drop else 2048
+            self._resnet = get_model('resnet')(output_raw=True, drop_dim=drop_dim)
         self._temporal_process = nn.Sequential(NonLocalLayer(n_convs, n_convs, attn_ff, dropout=dropout, n_heads=attn_heads), nn.Conv3d(n_convs, n_convs, (context_T, 1, 1), 1))
         in_dim, self._use_ss = n_convs * 2 if use_ss else n_convs, use_ss
         self._to_embed = nn.Sequential(nn.Linear(in_dim, embed_hidden), nn.Dropout(dropout), nn.ReLU(), nn.Linear(embed_hidden, latent_dim))
@@ -45,8 +51,8 @@ class _VisualFeatures(nn.Module):
 
     def _resnet_features(self, x):
         if self._pe is None:
-            return self._resnet18(x)
-        features = self._resnet18(x).transpose(1, 2)
+            return self._resnet(x)
+        features = self._resnet(x).transpose(1, 2)
         features = self._pe(features).transpose(1, 2)
         return features
 
