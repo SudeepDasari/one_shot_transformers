@@ -134,6 +134,12 @@ class Trainer:
                                     self._writer.add_image('{}/{}'.format(k, mode), v_grid, self._step)
                             elif not isinstance(v, torch.Tensor):
                                 self._writer.add_scalar('{}/{}'.format(k, mode), v, self._step)
+                    
+                    # add learning rate parameter to log
+                    lrs = np.mean([p['lr'] for p in optimizer.param_groups])
+                    self._writer.add_scalar('lr', lrs, self._step)
+
+                    # flush to disk and print
                     self._writer.file_writer.flush()
                     print('epoch {3}/{4}, step {0}: loss={1:.4f} \t val loss={2:.4f}'.format(self._step, train_stats['loss'], vl_running_mean, e, epochs))
                 else:
