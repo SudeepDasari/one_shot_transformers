@@ -107,6 +107,27 @@ class NonLocalLayer(nn.Module):
         return self._norm(out)
 
 
+class TempConvLayer(nn.Module):
+    def __init__(self, in_dim, out_dim, feedforward_dim=512, dropout=0, temperature=None, causal=False, n_heads=None, k=5):
+        super().__init__()
+        self._causal, self._skip = causal, out_dim == in_dim
+        frame_pad = int(k // 2)
+        self._pad = k - 1 if causal else frame_pad
+        self._c1, self._a1 = nn.Conv3d(in_dim, feedforward_dim, 1), nn.ReLU(inplace=True)
+        self._c2, self._a2 = nn.Conv3d(feedforward_dim, feedforward_dim, k, padding=(self._pad, frame_pad, frame_pad)), nn.ReLU(inplace=True)
+        self._c3, self._a3 = nn.Conv3d(feedforward_dim, out_dim, 1), nn.ReLU(inplace=dropout==0)
+        self._drop = nn.Dropout3d(dropout)
+        self._norm = nn.BatchNorm3d(out_dim)
+
+    def forward(self, inputs):
+        downsized = self._a1(self._c1(inputs))
+        ff = self._a2(self._c2(downsized))
+        ff = ff[:,:,:-self._pad] if self._causal else ff
+        upsized = self._drop(self._a3(self._c3(ff)))
+        out = inputs + upsized if self._skip else upsized
+        return self._norm(out)
+
+
 class AttentionGoalState(nn.Module):
     def __init__(self, in_dim=1024, out_dim=128, max_pos_len=3000, num_attn=2, dropout=0.0, T=3, ff_dim=512, temperature=1):
         super().__init__()
