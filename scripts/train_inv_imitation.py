@@ -19,7 +19,7 @@ if __name__ == '__main__':
     inv_loss_mult = config.get('inv_loss_mult', 1.0)
     def forward(m, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
-        images, pnts = traj['images'].to(device), traj['points'].to(device).long()
+        images = traj['images'].to(device)
         context = context.to(device)
 
         # compute predictions and action LL
@@ -48,6 +48,7 @@ if __name__ == '__main__':
         stats = {'inverse_loss':l_inv.item(), 'bc_loss': l_bc.item(), 'goal_loss': goal_stat}
 
         if 'point_ll' in out:
+            pnts = traj['points'].to(device).long()
             l_point = torch.mean(-out['point_ll'][range(pnts.shape[0]), pnts[:,-1,0], pnts[:,-1,1]])
             loss = loss + pnt_weight * l_point
             stats['point_loss'] = l_point.item()
