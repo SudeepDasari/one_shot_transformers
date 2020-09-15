@@ -17,7 +17,7 @@ if __name__ == '__main__':
     def forward(m, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
         images = traj['images'].to(device)
-        context = context.to(device)
+        context = context['video'].to(device)
 
         # compute predictions and action LL
         mu_bc, scale_bc, logit_bc = m(states, images, context, ret_dist=False)

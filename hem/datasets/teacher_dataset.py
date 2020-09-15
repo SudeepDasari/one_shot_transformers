@@ -5,7 +5,7 @@ import random
 
 class TeacherDemonstrations(AgentDemonstrations):
     def proc_traj(self, traj):
-        return self._make_context(traj)
+        return {'video': self._make_context(traj)}
 
 
 if __name__ == '__main__':

@@ -21,7 +21,7 @@ if __name__ == '__main__':
     def forward(meta_model, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
         images = traj['images'].to(device)
-        context = context.to(device)
+        context = context['video'].to(device)
         aux = traj['aux_pose'].to(device)
         
         # compute per task learned train loss and val loss

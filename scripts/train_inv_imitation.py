@@ -13,6 +13,7 @@ if __name__ == '__main__':
     config = trainer.config
     
     # build Imitation Module and MDN Loss
+    repeat_last = config.get('repeat_last', False)
     pnt_weight = config.get('pnt_weight', 0.1)
     goal_loss, goal_margin = config.get('goal_loss', True), config.get('goal_margin', -1)
     action_model = InverseImitation(**config['policy'])
@@ -20,7 +21,11 @@ if __name__ == '__main__':
     def forward(m, device, context, traj, append=True):
         states, actions = traj['states'].to(device), traj['actions'].to(device)
         images = traj['images'].to(device)
-        context = context.to(device)
+        context = context['video'].to(device)
+
+        if repeat_last:
+            old_T = context.shape[1]
+            context = context[:,-1:].repeat((1, old_T, 1, 1, 1))
 
         # compute predictions and action LL
         out = m(states, images, context, ret_dist=False)
