@@ -9,7 +9,7 @@ import numpy as np
 from torch.distributions import MultivariateNormal
 
 
-class _VisualFeatures(nn.Module):
+class _TransformerFeatures(nn.Module):
     def __init__(self, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False, use_pe=False, attn_heads=1, attn_ff=128, just_conv=False):
         super().__init__()
         self._resnet18 = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True)
@@ -50,27 +50,57 @@ class _VisualFeatures(nn.Module):
         return features
 
 
-class _VisualGoalFeatures(_VisualFeatures):
-    def __init__(self, goal_dim, latent_dim, context_T=3, embed_hidden=256, dropout=0.2, n_st_attn=0, use_ss=True, st_goal_attn=False):
-        super().__init__(latent_dim, context_T, embed_hidden, dropout, n_st_attn, use_ss, st_goal_attn)
-        self._goal_nonloc = NonLocalLayer(512, 512, 128, dropout=dropout)
-        self._2_goal_vec = nn.Sequential(nn.Linear(512, embed_hidden), nn.Dropout(), nn.ReLU(), nn.Linear(embed_hidden, goal_dim))
-    
-    def forward(self, img0, context, forward_predict):
-        if not forward_predict:
-            return super().forward(img0, context, False)
-
-        f_img0 = self._resnet_features(img0).transpose(1, 2)
-        f_goal = self._resnet_features(context).transpose(1, 2)
+class _AblatedFeatures(_TransformerFeatures):
+    def __init__(self, latent_dim, model_type='basic', temp_convs=False, lstm=False, context_T=2):
+        nn.Module.__init__(self)
         
-        # calculate goal embedding
-        f_goal = self._goal_nonloc(f_goal)
-        goal_embed = F.normalize(self._2_goal_vec(torch.mean(f_goal, (2, 3, 4)))[:,None], dim=2)
+        # initialize visual network
+        assert model_type in ('basic', 'resnet'), "Unsupported model!"
+        self._visual_model = get_model('resnet')(output_raw=True, drop_dim=2, use_resnet18=True) if model_type == 'resnet' else get_model('basic')()
+        ss_dim = 1024 if model_type == 'resnet' else 64
+        self._use_ss, self._latent_dim = True, latent_dim
 
-        # calculate forward prediction
-        pred_features = self._temporal_process(torch.cat((f_img0, f_goal), 2)).transpose(1, 2)
-        pred_features = torch.mean(pred_features, 1, keepdim=True)
-        return F.normalize(self._to_embed(self._spatial_embed(pred_features)), dim=2), goal_embed
+        # seperate module to process context if needed
+        self._temp_convs = temp_convs
+        if temp_convs:
+            tc_dim = int(ss_dim / 2)
+            fc1, a1 = nn.Linear(ss_dim, ss_dim), nn.ReLU(inplace=True)
+            fc2, a2 = nn.Linear(ss_dim, ss_dim), nn.ReLU(inplace=True)
+            self._fcs = nn.Sequential(fc1, a1, fc2, a2)
+            self._tc = nn.Conv1d(ss_dim, tc_dim, context_T, stride=1)
+        else:
+            tc_dim = 0
+        
+        # go from input features to latent vector
+        self._to_goal = nn.Sequential(nn.Linear((context_T + 1) * (tc_dim + ss_dim), tc_dim + ss_dim), nn.ReLU(inplace=True), nn.Linear(tc_dim + ss_dim, latent_dim))
+        self._to_latent = nn.Sequential(nn.Linear(tc_dim + ss_dim, latent_dim), nn.ReLU(inplace=True), nn.Linear(latent_dim, latent_dim))
+
+        # configure lstm network for sequential processing
+        self._has_lstm = lstm
+        if lstm:
+            self._lstm_module = nn.LSTM(latent_dim, latent_dim, 1)
+    
+    def forward(self, images, context, forward_predict):
+        feats = self._visual_model(torch.cat((context, images), 1))
+        feats = self._spatial_embed(feats)
+
+        if self._temp_convs:
+            ctxt_feats = feats[:,:context.shape[1]]
+            ctxt_feats = self._tc(self._fcs(ctxt_feats).transpose(1, 2)).transpose(1,2)
+            feats = torch.cat((feats, ctxt_feats.repeat((1, feats.shape[1], 1))), 2)
+        
+        if forward_predict:
+            goal_feats = feats[:,:context.shape[1] + 1].reshape((feats.shape[0], -1))
+            return self._to_goal(goal_feats)[:,None]
+
+        latents = self._to_latent(feats)
+        latents = self._lstm(latents) if self._has_lstm else latents
+        return latents[:,context.shape[1]:]
+
+    def _lstm(self, latents):
+        assert self._has_lstm, "needs lstm to forward!"
+        self._lstm_module.flatten_parameters()
+        return self._lstm_module(latents)[0]
 
 
 class _DiscreteLogHead(nn.Module):
@@ -99,31 +129,26 @@ class _DiscreteLogHead(nn.Module):
 
 
 class InverseImitation(nn.Module):
-    def __init__(self, latent_dim, lstm_config, goal_dim=None, goal_is_st=True, sdim=9, adim=8, n_mixtures=3, concat_state=True, const_var=False, pred_point=False, vis=dict()):
+    def __init__(self, latent_dim, lstm_config, sdim=9, adim=8, n_mixtures=3, concat_state=True, const_var=False, pred_point=False, vis=dict(), transformer_feat=True):
         super().__init__()
-        # check goal embedding arguments
-        self._goal_is_st, goal_dim = goal_is_st, goal_dim if goal_dim is not None else latent_dim
-        if goal_is_st:
-            assert goal_dim == latent_dim, "goal dim must be same as latent if goal is to be s_t!"
-
         # initialize visual embeddings
-        self._embed = _VisualFeatures(latent_dim, **vis) if goal_is_st else _VisualGoalFeatures(goal_dim, latent_dim, **vis)
+        self._embed = _TransformerFeatures(latent_dim, **vis) if transformer_feat else _AblatedFeatures(latent_dim, **vis)
 
         # inverse modeling
         inv_dim = latent_dim * 2
         self._inv_model = nn.Sequential(nn.Linear(inv_dim, lstm_config['out_dim']), nn.ReLU())
 
         # additional point loss on goal
-        self._2_point = nn.Sequential(nn.Linear(goal_dim, goal_dim), nn.ReLU(), nn.Linear(goal_dim, 5)) if pred_point else None
+        self._2_point = nn.Sequential(nn.Linear(latent_dim, latent_dim), nn.ReLU(), nn.Linear(latent_dim, 5)) if pred_point else None
 
         # action processing
         assert n_mixtures >= 1, "must predict at least one mixture!"
         self._concat_state, self._n_mixtures = concat_state, n_mixtures
         self._is_rnn = lstm_config.get('is_rnn', True)
         if self._is_rnn:
-            self._action_module = nn.LSTM(int(goal_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
+            self._action_module = nn.LSTM(int(latent_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim'], lstm_config['n_layers'])
         else:
-            l1, l2 = [nn.Linear(int(goal_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU()], []
+            l1, l2 = [nn.Linear(int(latent_dim + latent_dim + float(concat_state) * sdim), lstm_config['out_dim']), nn.ReLU()], []
             for _ in range(lstm_config['n_layers'] - 1):
                 l2.extend([nn.Linear(lstm_config['out_dim'], lstm_config['out_dim']), nn.ReLU()])
             self._action_module = nn.Sequential(*(l1 + l2))
@@ -163,10 +188,8 @@ class InverseImitation(nn.Module):
         return out
 
     def _pred_goal(self, img0, context):
-        if self._goal_is_st:
-            g_embed = self._embed(img0, context, True)
-            return g_embed, g_embed
-        return self._embed(img0, context, True)
+        g_embed = self._embed(img0, context, True)
+        return g_embed, g_embed
 
     def _pred_point(self, obs, goal_embed, im_shape, min_std=0.03):
         if self._2_point is None:

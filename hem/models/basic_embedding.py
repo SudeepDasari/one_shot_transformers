@@ -219,3 +219,24 @@ class AuxModel(nn.Module):
         proj_embeds = self._project_channel(context_embeds.view((context_embeds.shape[0], context_embeds.shape[1], -1)).transpose(1, 2))[:,:,0]
         bottleneck = self._to_bottlekneck(proj_embeds)
         return bottleneck
+
+
+class BasicCNN(nn.Module):
+    def __init__(self, drop_dim=None):
+        super().__init__()
+        c1 = nn.Conv2d(3, 32, 3, stride=2, padding=1)
+        a1 = nn.ReLU(inplace=True)
+        c2 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
+        a2 = nn.ReLU(inplace=True)
+        c3 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
+        a3 = nn.ReLU(inplace=True)
+        c4 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
+        self._v_net = nn.Sequential(c1, a1, c2, a2, c3, a3, c4)
+    
+    def forward(self, inputs):
+        reshaped = len(inputs.shape) == 5
+        x = inputs.reshape((-1, inputs.shape[-3], inputs.shape[-2], inputs.shape[-1])) if reshaped else inputs
+        out = self._v_net(x)
+        C, H, W = out.shape[-3:]
+        out = out.reshape((inputs.shape[0], inputs.shape[1], C, H, W)) if reshaped else out
+        return out
