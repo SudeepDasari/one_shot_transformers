@@ -15,7 +15,7 @@ if __name__ == '__main__':
     # build Imitation Module and MDN Loss
     repeat_last = config.get('repeat_last', False)
     pnt_weight = config.get('pnt_weight', 0.1)
-    goal_loss, goal_margin = config.get('goal_loss', True), config.get('goal_margin', -1)
+    goal_loss, goal_margin = config.get('goal_loss', False), config.get('goal_margin', -1)
     action_model = InverseImitation(**config['policy'])
     inv_loss_mult = config.get('inv_loss_mult', 1.0)
     def forward(m, device, context, traj, append=True):

@@ -29,4 +29,7 @@ def get_model(name):
     elif name == 'simple':
         from .basic_embedding import SimpleSpatialSoftmax
         return SimpleSpatialSoftmax
+    elif name == "basic":
+        from .basic_embedding import BasicCNN
+        return BasicCNN
     raise NotImplementedError
