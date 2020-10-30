@@ -45,5 +45,5 @@ def get_test_objects(N=4, partial=False):
         objs, names = partial_test_objects, partial_test_object_names
     else:
         objs, names = test_objects, test_object_names
-    indices = np.random.choice(len(test_objects), size=(N,), replace=False)
+    indices = np.random.choice(len(objs), size=(N,), replace=False)
     return [objs[i] for i in indices], [names[i] for i in indices]
