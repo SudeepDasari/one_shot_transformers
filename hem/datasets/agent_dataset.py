@@ -101,10 +101,10 @@ class AgentDemonstrations(Dataset):
         frames = []
         for i in range(self._T_context):
             n = clip(np.random.randint(int(i * per_bracket), int((i + 1) * per_bracket)))
-            if self._sample_sides and i == 0:
-                n = self._min_frame
-            elif self._sample_sides and i == self._T_context - 1:
+            if self._sample_sides and i == self._T_context - 1:
                 n = len(traj) - 1
+            elif self._sample_sides and i == 0:
+                n = self._min_frame
             frames.append(_make_frame(n))
         frames = np.concatenate(frames, 0)
         frames = randomize_video(frames, self._color_jitter, self._rand_gray, self._rand_crop, self._rand_rot, self._rand_trans, self._normalize)
