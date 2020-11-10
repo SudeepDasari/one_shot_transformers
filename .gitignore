@@ -1,0 +1,9 @@
+*.egg-info/*
+__pycache__
+*.gif
+*.jpg
+*.png
+*.pkl
+runs
+scratch/*
+MUJOCO_LOG.TXT

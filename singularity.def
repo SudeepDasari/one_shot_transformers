@@ -1,0 +1,13 @@
+Bootstrap: docker
+From: docker://cudagl:10.0-devel-ubuntu16.04
+Namespace: nvidia
+
+%post
+    apt-get -y update
+    apt-get -y install libglew-dev libosmesa6-dev libgl1-mesa-glx libglfw3 libgtk2.0-dev vim wget
+    wget -c https://repo.anaconda.com/archive/Anaconda3-2019.10-Linux-x86_64.sh
+    /bin/bash Anaconda3-2019.10-Linux-x86_64.sh -bfp /usr/local
+    conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
+
+%environment
+    export LD_LIBRARY_PATH=/home/$USER/.mujoco/mujoco200/bin:$LD_LIBRARY_PATH    
