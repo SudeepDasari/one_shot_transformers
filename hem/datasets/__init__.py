@@ -13,10 +13,7 @@ except:
 
 
 def get_dataset(name):
-    if name == 'something something':
-        from .something_dataset import SomethingSomething
-        return SomethingSomething
-    elif name == 'agent teacher':
+    if name == 'agent teacher':
         from .agent_teacher_dataset import AgentTeacherDataset
         return AgentTeacherDataset
     elif name == 'paired agent teacher':
@@ -28,39 +25,6 @@ def get_dataset(name):
     elif name == 'agent':
         from .agent_dataset import AgentDemonstrations
         return AgentDemonstrations
-    elif name == 'paired frames':
-        from .frame_datasets import PairedFrameDataset
-        return PairedFrameDataset
-    elif name == 'synced frames':
-        from .frame_datasets import SyncedFramesDataset
-        return SyncedFramesDataset
-    elif name == 'unpaired frames':
-        from .frame_datasets import UnpairedFrameDataset
-        return UnpairedFrameDataset
-    elif name == 'imitation':
-        from .imitation_dataset import ImitationDataset
-        return ImitationDataset
-    elif name == 'states':
-        from .imitation_dataset import StateDataset
-        return StateDataset
-    elif name == 'states imcontext':
-        from .imitation_dataset import StateDatasetVisionContext
-        return StateDatasetVisionContext
-    elif name == 'pick place':       
-        from .imitation_dataset import AuxDataset
-        return AuxDataset
-    elif name == 'gen grip':
-        from .image_gen_dataset import GenGrip
-        return GenGrip
-    elif name == 'goal image':
-        from .image_gen_dataset import GoalImageDataset
-        return GoalImageDataset
-    elif name == 'aux contrastive':
-        from .frame_datasets import AuxContrastiveDataset
-        return AuxContrastiveDataset
-    elif name == 'contrastive goals':
-        from .goal_datasets import ContrastiveGoals
-        return ContrastiveGoals
     raise NotImplementedError
 
 
