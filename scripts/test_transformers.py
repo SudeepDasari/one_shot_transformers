@@ -22,17 +22,6 @@ import random
 set_start_method('forkserver', force=True)
 
 
-TRAIN_SEED = 263237945
-SEED = None
-diverse = False
-
-
-if diverse:
-    S_env, P_env = 'SawyerPickPlaceTestObjs', 'PandaPickPlaceTestObjs'
-else:
-    S_env, P_env = 'SawyerPickPlaceDistractor', 'PandaPickPlaceDistractor'
-
-
 def build_formatter(config):
     def resize_crop(img):
         crop_params = config['dataset'].get('crop', (0,0,0,0))
@@ -44,13 +33,10 @@ def build_formatter(config):
 
 def build_env_context(T_context=3, ctr=0):
     task = ctr % 16
-    create_seed = random.Random(SEED)
+    create_seed = random.Random(None)
     create_seed = create_seed.getrandbits(32)
-    if diverse:
-        teacher_expert_rollout = get_expert_trajectory(S_env, task=task, seed=create_seed, force_success=True)
-    else:
-        teacher_expert_rollout = get_expert_trajectory(S_env, task=task, seed=create_seed)
-    agent_env = get_expert_trajectory(P_env, task=task, ret_env=True, seed=create_seed)
+    teacher_expert_rollout = get_expert_trajectory('SawyerPickPlaceDistractor', task=task, seed=create_seed)
+    agent_env = get_expert_trajectory('PandaPickPlaceDistractor', task=task, ret_env=True, seed=create_seed)
 
     context = select_random_frames(teacher_expert_rollout, T_context, True)
     return agent_env, context
@@ -60,11 +46,10 @@ def rollout_imitation(model, config, ctr, max_T=60, parallel = False):
     img_formatter = build_formatter(config)
     env, context_frames = build_env_context(config['dataset'].get('T_context', 15), ctr)
 
-    horizon = config['dataset'].get('T_pair', 0)
     done, states, images = False, [], []
     context = torch.from_numpy(np.concatenate([img_formatter(i)[None] for i in context_frames], 0))[None].cuda()
 
-    np.random.seed(SEED); env.reset()
+    np.random.seed(None); env.reset()
     obs = env.reset()
     n_steps = 0
     traj = Trajectory()
@@ -82,13 +67,11 @@ def rollout_imitation(model, config, ctr, max_T=60, parallel = False):
         images.append(img_formatter(obs['image'])[None])
 
         s_t, i_t = [torch.from_numpy(np.concatenate(arr, 0).astype(np.float32))[None].cuda() for arr in (states, images)]
-        # cv2.imshow('t', vis[:,:,::-1]); cv2.waitKey(100)
         with torch.no_grad():
             out = model(s_t, i_t, context)
         
         action = out['bc_distrib'].sample()[0, -1].cpu().numpy()
         action[3:7] = [0.296875, 0.703125, 0.703125, 0.0]
-        # print(action[[0,1,2,3,7]]) 
         action[-1] = 1 if action[-1] > 0 and n_steps < max_T - 1 else -1 
         obs, reward, env_done, info = env.step(action)
         
@@ -102,13 +85,8 @@ def rollout_imitation(model, config, ctr, max_T=60, parallel = False):
 
 
 def _proc(n_workers, model, config, n):
-    rollout, task_success_flags, context = rollout_imitation(model, config, n, parallel = n_workers > 1)
+    rollout, task_success_flags, _ = rollout_imitation(model, config, n, parallel = n_workers > 1)
     pkl.dump(rollout, open('./results/traj{}.pkl'.format(n), 'wb'))
-#    writer = imageio.get_writer('./results/traj{}.mp4'.format(n), fps=15)
-#    for t in rollout:
-#        writer.append_data(np.concatenate((context[0], context[1], t['obs']['image']), 1))
-#    writer.close()
-    
     json.dump({k:bool(v) for k, v in task_success_flags.items()}, open('./results/traj{}.json'.format(n), 'w'))
     return task_success_flags
 
