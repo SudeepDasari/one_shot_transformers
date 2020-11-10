@@ -104,10 +104,10 @@ def select_random_frames(frames, n_select, sample_sides=False):
 
     for i in range(n_select):
         n = clip(np.random.randint(int(i * per_bracket), int((i + 1) * per_bracket)))
-        if sample_sides and i == 0:
-            n = 0
-        elif sample_sides and i == n_select - 1:
+        if sample_sides and i == n_select - 1:
             n = len(frames) - 1
+        elif sample_sides and i == 0:
+            n = 0
         selected_frames.append(n)
 
     if isinstance(frames, (list, tuple)):
@@ -115,3 +115,4 @@ def select_random_frames(frames, n_select, sample_sides=False):
     elif isinstance(frames, Trajectory):
         return [frames[i]['obs']['image'] for i in selected_frames]
     return frames[selected_frames]
+
